@@ -15,7 +15,7 @@ jobs:
       - name: Build Release APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease \
+          ./gradlew assembleRelease --info 2>&1 | tail -100 \
             -Pandroid.injected.signing.store.file=$(pwd)/app/embroidery.keystore \
             -Pandroid.injected.signing.store.password=Embroidery2026 \
             -Pandroid.injected.signing.key.alias=embroidery \
