@@ -14,7 +14,6 @@ jobs:
           cache: gradle
       - name: Build Debug APK
         run: |
-          gradle wrapper --gradle-version 8.4
           chmod +x gradlew
           ./gradlew assembleDebug
       - name: Upload APK
