@@ -12,12 +12,13 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
-      - name: Grant execute permission
-        run: chmod +x gradlew
-      - name: Build APK
-        run: ./gradlew assembleDebug
+      - name: Build Debug APK
+        run: |
+          gradle wrapper --gradle-version 8.4
+          chmod +x gradlew
+          ./gradlew assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: EmbroideryStudioPro
+          name: EmbroideryStudioPro-debug
           path: app/build/outputs/apk/debug/*.apk
