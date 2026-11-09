@@ -311,7 +311,7 @@ fun CenterScreen(emoji: String, title: String, msg: String) {
 fun SettingsScreen() {
     LazyColumn(Modifier.fillMaxSize().background(Color(0xFF0D0D1A)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("الإعدادات", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
-        listOf(Triple("🌐", "اللغة", "العربية"), Triple("📐", "وحدة القياس", "ملليمتر"), Triple("⚡", "جودة الاستخراج", "عالية"), Triple("🌙", "الوضع", "داكن"), Triple("📱", "الإصدار", "3.0 • 2026")).forEach { (e, t, v) ->
+        listOf(Triple("🌐", "اللغة", "العربية"), Triple("📐", "وحدة القياس", "ملليمتر"), Triple("⚡", "جودة الاستخراج", "عالية"), Triple("🌙", "الوضع", "داكن"), Triple("📱", "الإصدار", "3.1 • 2026")).forEach { (e, t, v) ->
             item {
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E))) {
                     Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
