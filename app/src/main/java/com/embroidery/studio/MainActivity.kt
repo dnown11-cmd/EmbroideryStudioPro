@@ -31,25 +31,36 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +82,8 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.abs
@@ -78,13 +91,15 @@ import kotlin.math.abs
 data class Stitch(val x: Float, val y: Float, val colorIdx: Int)
 
 data class Project(
+    val id: String = System.currentTimeMillis().toString(),
     val name: String = "مشروع جديد",
     val imageUri: Uri? = null,
     val extracted: Bitmap? = null,
     val colors: List<Int> = emptyList(),
     val stitches: List<Stitch> = emptyList(),
     val widthMM: Float = 0f,
-    val heightMM: Float = 0f
+    val heightMM: Float = 0f,
+    val savedAt: Long = 0L
 )
 
 class MainActivity : ComponentActivity() {
@@ -113,8 +128,50 @@ fun AppTheme(content: @Composable () -> Unit) {
 fun MainApp() {
     var screen by remember { mutableStateOf("home") }
     var project by remember { mutableStateOf(Project()) }
+    var projects by remember { mutableStateOf(listOf<Project>()) }
     var loading by remember { mutableStateOf(false) }
     var loadingMsg by remember { mutableStateOf("") }
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var projectName by remember { mutableStateOf("") }
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) { projects = loadProjects(ctx) }
+
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            containerColor = Color(0xFF1A1A2E),
+            title = { Text("حفظ المشروع", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = projectName,
+                    onValueChange = { projectName = it },
+                    label = { Text("اسم المشروع", color = Color.Gray) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF9C6FDE),
+                        unfocusedBorderColor = Color.Gray,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        val saved = project.copy(name = projectName.ifEmpty { "مشروع جديد" }, savedAt = System.currentTimeMillis())
+                        saveProject(ctx, saved)
+                        projects = loadProjects(ctx)
+                        showSaveDialog = false
+                    }
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C6FDE))) {
+                    Text("حفظ")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showSaveDialog = false }) { Text("إلغاء", color = Color.Gray) } }
+        )
+    }
+
     Scaffold(
         containerColor = Color(0xFF0D0D1A),
         topBar = {
@@ -122,34 +179,29 @@ fun MainApp() {
                 title = {
                     Column {
                         Text("Embroidery Studio Pro", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("v3.2 • 2026", fontSize = 10.sp, color = Color(0xFF9C6FDE))
+                        Text("v3.3 • 2026", fontSize = 10.sp, color = Color(0xFF9C6FDE))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0D0D1A)),
                 actions = {
                     if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFF9C6FDE), strokeWidth = 2.dp)
+                    if (project.stitches.isNotEmpty()) {
+                        IconButton(onClick = { projectName = project.name; showSaveDialog = true }) {
+                            Icon(Icons.Default.Save, null, tint = Color(0xFF9C6FDE))
+                        }
+                    }
                 }
             )
         },
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF1A1A2E)) {
-                listOf(
-                    Triple("home", Icons.Default.Home, "الرئيسية"),
-                    Triple("projects", Icons.Default.List, "مشاريعي"),
-                    Triple("settings", Icons.Default.Settings, "الإعدادات")
-                ).forEach { (s, icon, label) ->
+                listOf(Triple("home", Icons.Default.Home, "الرئيسية"), Triple("projects", Icons.Default.List, "مشاريعي"), Triple("settings", Icons.Default.Settings, "الإعدادات")).forEach { (s, icon, label) ->
                     NavigationBarItem(
                         icon = { Icon(icon, null) },
                         label = { Text(label, fontSize = 11.sp) },
                         selected = screen == s,
                         onClick = { screen = s },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF9C6FDE),
-                            selectedTextColor = Color(0xFF9C6FDE),
-                            unselectedIconColor = Color.Gray,
-                            unselectedTextColor = Color.Gray,
-                            indicatorColor = Color(0xFF2A2A3E)
-                        )
+                        colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFF9C6FDE), selectedTextColor = Color(0xFF9C6FDE), unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray, indicatorColor = Color(0xFF2A2A3E))
                     )
                 }
             }
@@ -158,7 +210,7 @@ fun MainApp() {
         Box(Modifier.padding(pad)) {
             when (screen) {
                 "home" -> HomeScreen(project, loading, loadingMsg, { project = it }, { b, m -> loading = b; loadingMsg = m })
-                "projects" -> CenterScreen("🗂️", "مشاريعي", "لا توجد مشاريع")
+                "projects" -> ProjectsScreen(projects, { project = it; screen = "home" }, { p -> scope.launch { deleteProject(ctx, p.id); projects = loadProjects(ctx) } })
                 "settings" -> SettingsScreen()
             }
         }
@@ -174,26 +226,17 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
     }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Box(
-                Modifier.fillMaxWidth().height(110.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF1A1A3E), Color(0xFF2A1A3E))))
-                    .border(1.dp, Brush.linearGradient(listOf(Color(0xFF9C6FDE), Color(0xFF6FCFDE))), RoundedCornerShape(20.dp))
-                    .padding(16.dp)
-            ) {
+            Box(Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(20.dp)).background(Brush.linearGradient(listOf(Color(0xFF1A1A3E), Color(0xFF2A1A3E)))).border(1.dp, Brush.linearGradient(listOf(Color(0xFF9C6FDE), Color(0xFF6FCFDE))), RoundedCornerShape(20.dp)).padding(16.dp)) {
                 Column {
                     Text("ابدأ مشروع تطريز 🧵", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        when {
-                            project.stitches.isNotEmpty() -> "✅ ${project.stitches.size} غرزة • ${String.format("%.1f", project.widthMM)}×${String.format("%.1f", project.heightMM)} مم"
-                            project.colors.isNotEmpty() -> "✅ ${project.colors.size} ألوان"
-                            project.extracted != null -> "✅ تم الاستخراج"
-                            project.imageUri != null -> "✅ تم تحميل الصورة"
-                            else -> "6 خطوات للحصول على تصميم احترافي"
-                        },
-                        color = Color(0xFF9C6FDE), fontSize = 12.sp
-                    )
+                    Text(when {
+                        project.stitches.isNotEmpty() -> "✅ ${project.stitches.size} غرزة • ${String.format("%.1f", project.widthMM)}×${String.format("%.1f", project.heightMM)} مم"
+                        project.colors.isNotEmpty() -> "✅ ${project.colors.size} ألوان"
+                        project.extracted != null -> "✅ تم الاستخراج"
+                        project.imageUri != null -> "✅ تم تحميل الصورة"
+                        else -> "6 خطوات للحصول على تصميم احترافي"
+                    }, color = Color(0xFF9C6FDE), fontSize = 12.sp)
                 }
             }
         }
@@ -210,15 +253,13 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E))) {
                 Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AsyncImage(project.imageUri, null, Modifier.weight(1f).height(100.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
-                    if (project.extracted != null) {
-                        Image(project.extracted.asImageBitmap(), null, Modifier.weight(1f).height(100.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
-                    }
+                    if (project.extracted != null) Image(project.extracted.asImageBitmap(), null, Modifier.weight(1f).height(100.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
                 }
             }
         }
         item { StepCard(1, "استيراد صورة", "اختر من المعرض", Color(0xFF9C6FDE), true) { picker.launch("image/*") } }
         item { StepCard(2, "استخراج النقشة", "فصل النقشة عن الخلفية", Color(0xFF4FBEAA), project.imageUri != null) {
-            scope.launch { onLoad(true, "جاري الاستخراج..."); val bm = loadBmp(ctx, project.imageUri!!); if (bm != null) onUpdate(project.copy(extracted = extractBg(bm))); onLoad(false, "") }
+            scope.launch { onLoad(true, "جاري الاستخراج..."); val bm = loadBmp(ctx, project.imageUri!!); if (bm != null) onUpdate(project.copy(extracted = extractPatternAuto(bm))); onLoad(false, "") }
         }}
         item { StepCard(3, "تحليل الألوان", "اكتشاف الألوان", Color(0xFFDE9C6F), project.extracted != null) {
             scope.launch { onLoad(true, "جاري تحليل الألوان..."); onUpdate(project.copy(colors = getColors(project.extracted!!))); onLoad(false, "") }
@@ -253,7 +294,7 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
                 Canvas(Modifier.fillMaxWidth().height(240.dp).padding(8.dp).clip(RoundedCornerShape(10.dp)).background(Color.White)) {
                     val mx = project.stitches.maxOfOrNull { it.x } ?: 1f
                     val my = project.stitches.maxOfOrNull { it.y } ?: 1f
-                    val sc = minOf(size.width / mx, size.height / my) * 0.9f
+                    val sc = minOf(size.width / mx, size.height / my) * 0.95f
                     val ox = (size.width - mx * sc) / 2f
                     val oy = (size.height - my * sc) / 2f
                     project.stitches.forEach { st ->
@@ -267,6 +308,38 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
             scope.launch { onLoad(true, "جاري التصدير..."); exportProject(ctx, project); onLoad(false, "") }
         }}
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+fun ProjectsScreen(projects: List<Project>, onOpen: (Project) -> Unit, onDelete: (Project) -> Unit) {
+    if (projects.isEmpty()) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF0D0D1A)), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("🗂️", fontSize = 56.sp)
+                Spacer(Modifier.height(12.dp))
+                Text("لا توجد مشاريع محفوظة", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("احفظ مشروعك من الأيقونة أعلاه", color = Color.Gray, fontSize = 13.sp)
+            }
+        }
+    } else {
+        LazyColumn(Modifier.fillMaxSize().background(Color(0xFF0D0D1A)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { Text("مشاريعي (${projects.size})", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+            items(projects) { p ->
+                Card(Modifier.fillMaxWidth().clickable { onOpen(p) }, shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)), border = BorderStroke(0.5.dp, Color(0xFF2A2A3E))) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(p.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("${p.stitches.size} غرزة • ${p.colors.size} ألوان", color = Color.Gray, fontSize = 12.sp)
+                            Text("${String.format("%.1f", p.widthMM)}×${String.format("%.1f", p.heightMM)} مم", color = Color(0xFF9C6FDE), fontSize = 11.sp)
+                        }
+                        IconButton(onClick = { onDelete(p) }) {
+                            Icon(Icons.Default.Delete, null, tint = Color(0xFFDE6F6F))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -296,22 +369,10 @@ fun InfoItem(label: String, value: String) {
 }
 
 @Composable
-fun CenterScreen(emoji: String, title: String, msg: String) {
-    Box(Modifier.fillMaxSize().background(Color(0xFF0D0D1A)), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(emoji, fontSize = 56.sp)
-            Spacer(Modifier.height(12.dp))
-            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text(msg, color = Color.Gray, fontSize = 13.sp)
-        }
-    }
-}
-
-@Composable
 fun SettingsScreen() {
     LazyColumn(Modifier.fillMaxSize().background(Color(0xFF0D0D1A)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("الإعدادات", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
-        listOf(Triple("🌐", "اللغة", "العربية"), Triple("📐", "وحدة القياس", "ملليمتر"), Triple("⚡", "جودة الاستخراج", "عالية"), Triple("🌙", "الوضع", "داكن"), Triple("📱", "الإصدار", "3.1 • 2026")).forEach { (e, t, v) ->
+        listOf(Triple("🌐", "اللغة", "العربية"), Triple("📐", "وحدة القياس", "ملليمتر"), Triple("⚡", "جودة الاستخراج", "عالية"), Triple("🌙", "الوضع", "داكن"), Triple("📱", "الإصدار", "3.3 • 2026")).forEach { (e, t, v) ->
             item {
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E))) {
                     Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -328,28 +389,23 @@ suspend fun loadBmp(ctx: android.content.Context, uri: Uri): Bitmap? = withConte
     try { ctx.contentResolver.openInputStream(uri)?.let { BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }
 }
 
-suspend fun extractBg(bm: Bitmap): Bitmap = withContext(Dispatchers.Default) {
+suspend fun extractPatternAuto(bm: Bitmap): Bitmap = withContext(Dispatchers.Default) {
     val w = bm.width; val h = bm.height
     val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
     val px = IntArray(w * h)
     bm.getPixels(px, 0, w, 0, 0, w, h)
-    val bg = px[0]; val br = android.graphics.Color.red(bg); val bg2 = android.graphics.Color.green(bg); val bb = android.graphics.Color.blue(bg)
-    for (i in px.indices) {
-        val r = android.graphics.Color.red(px[i]); val g = android.graphics.Color.green(px[i]); val b = android.graphics.Color.blue(px[i])
-        px[i] = if (abs(r - br) + abs(g - bg2) + abs(b - bb) > 60) px[i] else android.graphics.Color.TRANSPARENT
-    }
+    val edgeColors = mutableMapOf<Int, Int>()
+    for (x in 0 until w) { listOf(px[x], px[(h-1)*w+x]).forEach { c -> val q = android.graphics.Color.rgb((android.graphics.Color.red(c)/16)*16,(android.graphics.Color.green(c)/16)*16,(android.graphics.Color.blue(c)/16)*16); edgeColors[q] = (edgeColors[q] ?: 0) + 1 } }
+    for (y in 0 until h) { listOf(px[y*w], px[y*w+w-1]).forEach { c -> val q = android.graphics.Color.rgb((android.graphics.Color.red(c)/16)*16,(android.graphics.Color.green(c)/16)*16,(android.graphics.Color.blue(c)/16)*16); edgeColors[q] = (edgeColors[q] ?: 0) + 1 } }
+    val bgColor = edgeColors.maxByOrNull { it.value }?.key ?: px[0]
+    val bgR = android.graphics.Color.red(bgColor); val bgG = android.graphics.Color.green(bgColor); val bgB = android.graphics.Color.blue(bgColor)
+    for (i in px.indices) { val r = android.graphics.Color.red(px[i]); val g = android.graphics.Color.green(px[i]); val b = android.graphics.Color.blue(px[i]); px[i] = if (abs(r-bgR)+abs(g-bgG)+abs(b-bgB) > 45) px[i] else android.graphics.Color.TRANSPARENT }
     out.setPixels(px, 0, w, 0, 0, w, h); out
 }
 
 suspend fun getColors(bm: Bitmap): List<Int> = withContext(Dispatchers.Default) {
     val map = mutableMapOf<Int, Int>()
-    for (y in 0 until bm.height step 4) for (x in 0 until bm.width step 4) {
-        val p = bm.getPixel(x, y)
-        if (android.graphics.Color.alpha(p) > 128) {
-            val q = android.graphics.Color.rgb((android.graphics.Color.red(p) / 32) * 32, (android.graphics.Color.green(p) / 32) * 32, (android.graphics.Color.blue(p) / 32) * 32)
-            map[q] = (map[q] ?: 0) + 1
-        }
-    }
+    for (y in 0 until bm.height step 4) for (x in 0 until bm.width step 4) { val p = bm.getPixel(x, y); if (android.graphics.Color.alpha(p) > 128) { val q = android.graphics.Color.rgb((android.graphics.Color.red(p)/32)*32,(android.graphics.Color.green(p)/32)*32,(android.graphics.Color.blue(p)/32)*32); map[q] = (map[q] ?: 0) + 1 } }
     map.entries.sortedByDescending { it.value }.take(8).map { it.key }
 }
 
@@ -358,17 +414,7 @@ suspend fun genStitches(bm: Bitmap, colors: List<Int>): List<Stitch> = withConte
     for (y in 0 until bm.height step 4) {
         val lr = (y / 4) % 2 == 0
         val xs = if (lr) 0 until bm.width step 4 else bm.width - 1 downTo 0 step 4
-        for (x in xs) {
-            val p = bm.getPixel(x, y)
-            if (android.graphics.Color.alpha(p) > 128) {
-                var md = Int.MAX_VALUE; var ni = 0
-                colors.forEachIndexed { i, c ->
-                    val d = (android.graphics.Color.red(p) - android.graphics.Color.red(c)).let { it * it } + (android.graphics.Color.green(p) - android.graphics.Color.green(c)).let { it * it } + (android.graphics.Color.blue(p) - android.graphics.Color.blue(c)).let { it * it }
-                    if (d < md) { md = d; ni = i }
-                }
-                list.add(Stitch(x.toFloat(), y.toFloat(), ni))
-            }
-        }
+        for (x in xs) { val p = bm.getPixel(x, y); if (android.graphics.Color.alpha(p) > 128) { var md = Int.MAX_VALUE; var ni = 0; colors.forEachIndexed { i, c -> val d = (android.graphics.Color.red(p)-android.graphics.Color.red(c)).let{it*it}+(android.graphics.Color.green(p)-android.graphics.Color.green(c)).let{it*it}+(android.graphics.Color.blue(p)-android.graphics.Color.blue(c)).let{it*it}; if (d < md) { md = d; ni = i } }; list.add(Stitch(x.toFloat(), y.toFloat(), ni)) } }
     }
     list
 }
@@ -378,47 +424,41 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
     p.extracted?.let { bm -> FileOutputStream(File(dir, "${p.name}.png")).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) } }
     if (p.stitches.isNotEmpty()) {
         FileOutputStream(File(dir, "${p.name}.dst")).use { fos ->
-            fos.write(ByteArray(512) { 0x20 })
-            var lx = 0; var ly = 0
-            p.stitches.forEach { s ->
-                val dx = (s.x - lx).toInt().coerceIn(-121, 121)
-                val dy = (s.y - ly).toInt().coerceIn(-121, 121)
-                lx += dx; ly += dy
-                fos.write(byteArrayOf(dx.toByte(), dy.toByte(), 0x03))
-            }
+            fos.write(ByteArray(512) { 0x20 }); var lx = 0; var ly = 0
+            p.stitches.forEach { s -> val dx = (s.x-lx).toInt().coerceIn(-121,121); val dy = (s.y-ly).toInt().coerceIn(-121,121); lx += dx; ly += dy; fos.write(byteArrayOf(dx.toByte(), dy.toByte(), 0x03)) }
             fos.write(byteArrayOf(0x00, 0x00, 0xF3.toByte()))
         }
     }
 }
 
-suspend fun extractPatternAuto(bm: Bitmap): Bitmap = withContext(Dispatchers.Default) {
-    val w = bm.width; val h = bm.height
-    val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-    val px = IntArray(w * h)
-    bm.getPixels(px, 0, w, 0, 0, w, h)
-    val edgeColors = mutableMapOf<Int, Int>()
-    for (x in 0 until w) {
-        listOf(px[x], px[(h-1)*w+x]).forEach { c ->
-            val q = android.graphics.Color.rgb((android.graphics.Color.red(c)/16)*16, (android.graphics.Color.green(c)/16)*16, (android.graphics.Color.blue(c)/16)*16)
-            edgeColors[q] = (edgeColors[q] ?: 0) + 1
-        }
+suspend fun saveProject(ctx: android.content.Context, p: Project) = withContext(Dispatchers.IO) {
+    val dir = File(ctx.filesDir, "projects"); dir.mkdirs()
+    val json = JSONObject().apply {
+        put("id", p.id); put("name", p.name); put("savedAt", p.savedAt)
+        put("widthMM", p.widthMM); put("heightMM", p.heightMM)
+        put("stitchCount", p.stitches.size); put("colorCount", p.colors.size)
+        val colorsArr = JSONArray(); p.colors.forEach { colorsArr.put(it) }; put("colors", colorsArr)
     }
-    for (y in 0 until h) {
-        listOf(px[y*w], px[y*w+w-1]).forEach { c ->
-            val q = android.graphics.Color.rgb((android.graphics.Color.red(c)/16)*16, (android.graphics.Color.green(c)/16)*16, (android.graphics.Color.blue(c)/16)*16)
-            edgeColors[q] = (edgeColors[q] ?: 0) + 1
-        }
-    }
-    val bgColor = edgeColors.maxByOrNull { it.value }?.key ?: px[0]
-    val bgR = android.graphics.Color.red(bgColor)
-    val bgG = android.graphics.Color.green(bgColor)
-    val bgB = android.graphics.Color.blue(bgColor)
-    for (i in px.indices) {
-        val r = android.graphics.Color.red(px[i])
-        val g = android.graphics.Color.green(px[i])
-        val b = android.graphics.Color.blue(px[i])
-        px[i] = if (abs(r-bgR)+abs(g-bgG)+abs(b-bgB) > 45) px[i] else android.graphics.Color.TRANSPARENT
-    }
-    out.setPixels(px, 0, w, 0, 0, w, h)
-    out
+    File(dir, "${p.id}.json").writeText(json.toString())
+    p.extracted?.let { bm -> FileOutputStream(File(dir, "${p.id}.png")).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+}
+
+suspend fun loadProjects(ctx: android.content.Context): List<Project> = withContext(Dispatchers.IO) {
+    val dir = File(ctx.filesDir, "projects")
+    if (!dir.exists()) return@withContext emptyList()
+    dir.listFiles { f -> f.extension == "json" }?.mapNotNull { f ->
+        try {
+            val json = JSONObject(f.readText())
+            val colors = mutableListOf<Int>(); val arr = json.getJSONArray("colors")
+            for (i in 0 until arr.length()) colors.add(arr.getInt(i))
+            val imgFile = File(dir, "${json.getString("id")}.png")
+            val bm = if (imgFile.exists()) BitmapFactory.decodeFile(imgFile.absolutePath) else null
+            Project(id = json.getString("id"), name = json.getString("name"), extracted = bm, colors = colors, widthMM = json.getDouble("widthMM").toFloat(), heightMM = json.getDouble("heightMM").toFloat(), savedAt = json.getLong("savedAt"))
+        } catch (e: Exception) { null }
+    }?.sortedByDescending { it.savedAt } ?: emptyList()
+}
+
+suspend fun deleteProject(ctx: android.content.Context, id: String) = withContext(Dispatchers.IO) {
+    val dir = File(ctx.filesDir, "projects")
+    File(dir, "$id.json").delete(); File(dir, "$id.png").delete()
 }
