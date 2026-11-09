@@ -11,6 +11,14 @@ android {
         versionCode 3
         versionName "3.0"
     }
+    signingConfigs {
+        release {
+            storeFile file('embroidery.keystore')
+            storePassword 'Embroidery2026'
+            keyAlias 'embroidery'
+            keyPassword 'Embroidery2026'
+        }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -28,14 +36,6 @@ android {
         release {
             minifyEnabled false
             signingConfig signingConfigs.release
-        }
-    }
-    signingConfigs {
-        release {
-            storeFile file('../app/embroidery.keystore')
-            storePassword 'Embroidery2026'
-            keyAlias 'embroidery'
-            keyPassword 'Embroidery2026'
         }
     }
 }
