@@ -122,7 +122,7 @@ fun MainApp() {
                 title = {
                     Column {
                         Text("Embroidery Studio Pro", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("v3.0 • 2026", fontSize = 10.sp, color = Color(0xFF9C6FDE))
+                        Text("v3.2 • 2026", fontSize = 10.sp, color = Color(0xFF9C6FDE))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0D0D1A)),
@@ -250,13 +250,13 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
         item { StepCard(5, "معاينة", "مشاهدة التصميم", Color(0xFF6F9CDE), project.stitches.isNotEmpty()) {} }
         if (project.stitches.isNotEmpty()) item {
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E))) {
-                Canvas(Modifier.fillMaxWidth().height(180.dp).padding(8.dp).clip(RoundedCornerShape(10.dp)).background(Color.White)) {
+                Canvas(Modifier.fillMaxWidth().height(240.dp).padding(8.dp).clip(RoundedCornerShape(10.dp)).background(Color.White)) {
                     val mx = project.stitches.maxOfOrNull { it.x } ?: 1f
                     val my = project.stitches.maxOfOrNull { it.y } ?: 1f
                     val sc = minOf(size.width / mx, size.height / my) * 0.9f
                     val ox = (size.width - mx * sc) / 2f
                     val oy = (size.height - my * sc) / 2f
-                    project.stitches.take(3000).forEach { st ->
+                    project.stitches.forEach { st ->
                         val c = if (st.colorIdx < project.colors.size) Color(project.colors[st.colorIdx]) else Color.Black
                         drawCircle(c, 1.5f, Offset(ox + st.x * sc, oy + st.y * sc))
                     }
