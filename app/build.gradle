@@ -8,8 +8,8 @@ android {
         applicationId "com.embroidery.studio"
         minSdkVersion 24
         targetSdkVersion 34
-        versionCode 9
-        versionName "3.7"
+        versionCode 10
+        versionName "3.8"
     }
     signingConfigs {
         release {
