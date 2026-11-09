@@ -390,3 +390,35 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
         }
     }
 }
+
+suspend fun extractPatternAuto(bm: Bitmap): Bitmap = withContext(Dispatchers.Default) {
+    val w = bm.width; val h = bm.height
+    val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val px = IntArray(w * h)
+    bm.getPixels(px, 0, w, 0, 0, w, h)
+    val edgeColors = mutableMapOf<Int, Int>()
+    for (x in 0 until w) {
+        listOf(px[x], px[(h-1)*w+x]).forEach { c ->
+            val q = android.graphics.Color.rgb((android.graphics.Color.red(c)/16)*16, (android.graphics.Color.green(c)/16)*16, (android.graphics.Color.blue(c)/16)*16)
+            edgeColors[q] = (edgeColors[q] ?: 0) + 1
+        }
+    }
+    for (y in 0 until h) {
+        listOf(px[y*w], px[y*w+w-1]).forEach { c ->
+            val q = android.graphics.Color.rgb((android.graphics.Color.red(c)/16)*16, (android.graphics.Color.green(c)/16)*16, (android.graphics.Color.blue(c)/16)*16)
+            edgeColors[q] = (edgeColors[q] ?: 0) + 1
+        }
+    }
+    val bgColor = edgeColors.maxByOrNull { it.value }?.key ?: px[0]
+    val bgR = android.graphics.Color.red(bgColor)
+    val bgG = android.graphics.Color.green(bgColor)
+    val bgB = android.graphics.Color.blue(bgColor)
+    for (i in px.indices) {
+        val r = android.graphics.Color.red(px[i])
+        val g = android.graphics.Color.green(px[i])
+        val b = android.graphics.Color.blue(px[i])
+        px[i] = if (abs(r-bgR)+abs(g-bgG)+abs(b-bgB) > 45) px[i] else android.graphics.Color.TRANSPARENT
+    }
+    out.setPixels(px, 0, w, 0, 0, w, h)
+    out
+}
