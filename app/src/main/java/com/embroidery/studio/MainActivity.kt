@@ -468,7 +468,7 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
         val y1=b.y.toInt().coerceIn(0,bitmap.height-1)
         val steps=maxOf(kotlin.math.abs(x1-x0),kotlin.math.abs(y1-y0))
         if(steps==0) return false
-        val expected=ordered.firstOrNull { it.colorIdx==b.colorIdx }?.color ?: b.color
+        val expected=b.color
         for(k in 1..steps) {
             val x=x0+(x1-x0)*k/steps
             val y=y0+(y1-y0)*k/steps
