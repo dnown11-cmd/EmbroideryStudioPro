@@ -219,7 +219,7 @@ fun MainApp() {
     LaunchedEffect(Unit){projects=loadProjects(ctx)}
     if(showSaveDialog){AlertDialog(onDismissRequest={showSaveDialog=false},containerColor=Color(0xFF1A1A2E),title={Text("حفظ المشروع",color=Color.White,fontWeight=FontWeight.Bold)},text={OutlinedTextField(value=projectName,onValueChange={projectName=it},label={Text("اسم المشروع",color=Color.Gray)},colors=OutlinedTextFieldDefaults.colors(focusedBorderColor=Color(0xFF9C6FDE),unfocusedBorderColor=Color.Gray,focusedTextColor=Color.White,unfocusedTextColor=Color.White))},confirmButton={Button(onClick={scope.launch{val saved=project.copy(name=projectName.ifEmpty{"مشروع جديد"},savedAt=System.currentTimeMillis());saveProject(ctx,saved);projects=loadProjects(ctx);showSaveDialog=false}},colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF9C6FDE))){Text("حفظ")}},dismissButton={TextButton(onClick={showSaveDialog=false}){Text("إلغاء",color=Color.Gray)}})}
     Scaffold(containerColor=Color(0xFF0D0D1A),
-        topBar={TopAppBar(title={Column{Text("Embroidery Studio Pro",fontSize=16.sp,fontWeight=FontWeight.Bold,color=Color.White);Text("v3.8 • 2026",fontSize=10.sp,color=Color(0xFF9C6FDE))}},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color(0xFF0D0D1A)),actions={if(loading)CircularProgressIndicator(modifier=Modifier.size(20.dp),color=Color(0xFF9C6FDE),strokeWidth=2.dp);if(project.stitches.isNotEmpty())IconButton(onClick={projectName=project.name;showSaveDialog=true}){Icon(Icons.Default.Save,null,tint=Color(0xFF9C6FDE))}})},
+        topBar={TopAppBar(title={Column{Text("Embroidery Studio Pro",fontSize=16.sp,fontWeight=FontWeight.Bold,color=Color.White);Text("v4.3 • 2026",fontSize=10.sp,color=Color(0xFF9C6FDE))}},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color(0xFF0D0D1A)),actions={if(loading)CircularProgressIndicator(modifier=Modifier.size(20.dp),color=Color(0xFF9C6FDE),strokeWidth=2.dp);if(project.stitches.isNotEmpty())IconButton(onClick={projectName=project.name;showSaveDialog=true}){Icon(Icons.Default.Save,null,tint=Color(0xFF9C6FDE))}})},
         bottomBar={NavigationBar(containerColor=Color(0xFF1A1A2E)){listOf(Triple("home",Icons.Default.Home,"الرئيسية"),Triple("projects",Icons.Default.List,"مشاريعي"),Triple("settings",Icons.Default.Settings,"الإعدادات")).forEach{(s,icon,label)->NavigationBarItem(icon={Icon(icon,null)},label={Text(label,fontSize=11.sp)},selected=screen==s,onClick={screen=s},colors=NavigationBarItemDefaults.colors(selectedIconColor=Color(0xFF9C6FDE),selectedTextColor=Color(0xFF9C6FDE),unselectedIconColor=Color.Gray,unselectedTextColor=Color.Gray,indicatorColor=Color(0xFF2A2A3E)))}}}
     ){pad->Box(Modifier.padding(pad)){when(screen){"home"->HomeScreen(project,loading,loadingMsg,{project=it},{b,m->loading=b;loadingMsg=m});"projects"->ProjectsScreen(projects,{project=it;screen="home"},{p->scope.launch{deleteProject(ctx,p.id);projects=loadProjects(ctx)}});"settings"->SettingsScreen()}}}
 }
@@ -446,25 +446,44 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
     val dir=ctx.getExternalFilesDir(null)?:error("Export directory unavailable")
     val safeName=p.name.replace(Regex("[^\\p{L}\\p{N} _.-]"),"_").take(70).ifBlank{"embroidery"}
     p.extracted?.let{bm->FileOutputStream(File(dir,safeName+".png")).use{bm.compress(Bitmap.CompressFormat.PNG,100,it)}}
-    FileOutputStream(File(dir,safeName+".dst")).use{fos->
-        val hdr=ByteArray(512){0x20}
-        val header=("LA:"+safeName.take(12)+"\rST:"+p.stitches.size.toString().padStart(7,' ')+"\rCO:"+p.stitches.zipWithNext().count{(a,b)->a.colorIdx!=b.colorIdx}.toString().padStart(3,' ')+"\r")
-        val hb=header.toByteArray(Charsets.US_ASCII)
+    // DST stores geometry and color-change commands, not actual RGB thread colors.
+    // Group colors to avoid an unnecessary color change on every raster scan line.
+    val ordered = p.stitches.groupBy { it.colorIdx }.toSortedMap().values.flatMap { it }
+    FileOutputStream(File(dir,safeName+".dst")).use { fos ->
+        val hdr = ByteArray(512) { 0x20 }
+        val colorChanges = ordered.zipWithNext().count { (a,b) -> a.colorIdx != b.colorIdx }
+        val header = "LA:" + safeName.take(12) + "\rST:" +
+            ordered.size.toString().padStart(7,' ') + "\rCO:" +
+            colorChanges.toString().padStart(3,' ') + "\r"
+        val hb = header.toByteArray(Charsets.US_ASCII)
         System.arraycopy(hb,0,hdr,0,minOf(hb.size,511))
-        hdr[511]=0x1A;fos.write(hdr)
-        var lastX=0;var lastY=0;var lastColor=p.stitches.first().colorIdx
+        hdr[511] = 0x1A
+        fos.write(hdr)
+        var lastX=0; var lastY=0
+        var lastColor=ordered.first().colorIdx
         val scaleX=if(p.widthMM>0f && p.extracted!=null) p.widthMM*10f/p.extracted.width else 1f
         val scaleY=if(p.heightMM>0f && p.extracted!=null) p.heightMM*10f/p.extracted.height else scaleX
-        p.stitches.forEachIndexed{index,st->
-            if(index>0 && st.colorIdx!=lastColor){fos.write(tajimaRecord(0,0,0xC3));lastColor=st.colorIdx}
+        ordered.forEachIndexed { index, st ->
+            if(index>0 && st.colorIdx!=lastColor) {
+                fos.write(tajimaRecord(0,0,0xC3))
+                lastColor=st.colorIdx
+            }
             val targetX=(st.x*scaleX).toInt()
-            val targetY= -(st.y*scaleY).toInt()
-            var dx=targetX-lastX;var dy=targetY-lastY
-            val isJump=kotlin.math.abs(dx)>121 || kotlin.math.abs(dy)>121
-            if(dx==0 && dy==0)fos.write(tajimaRecord(0,0))
-            while(dx!=0 || dy!=0){
-                val sx=dx.coerceIn(-121,121);val sy=dy.coerceIn(-121,121)
-                fos.write(tajimaRecord(sx,sy,if(isJump)0x83 else 0x03))
+            val targetY=-(st.y*scaleY).toInt()
+            var dx=targetX-lastX
+            var dy=targetY-lastY
+            // Never sew across empty gaps: travel with jump commands.
+            // Even short gaps need a jump, not a connecting thread.
+            val jump=index==0 || (index>0 && (
+                st.colorIdx!=ordered[index-1].colorIdx ||
+                kotlin.math.abs(dx)>40 || kotlin.math.abs(dy)>40))
+            if(dx==0 && dy==0 && !jump) {
+                fos.write(tajimaRecord(0,0))
+            }
+            while(dx!=0 || dy!=0) {
+                val sx=dx.coerceIn(-121,121)
+                val sy=dy.coerceIn(-121,121)
+                fos.write(tajimaRecord(sx,sy,if(jump) 0x83 else 0x03))
                 dx-=sx;dy-=sy
             }
             lastX=targetX;lastY=targetY
