@@ -454,6 +454,36 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
     // DST stores geometry and color-change commands, not actual RGB thread colors.
     // Group colors to avoid an unnecessary color change on every raster scan line.
     val ordered = p.stitches.groupBy { it.colorIdx }.toSortedMap().values.flatMap { it }
+    // An empty pixel or another thread color between consecutive points must
+    // never be sewn as a normal stitch, even when the gap is less than 4 mm.
+    val mask = p.extracted?.let { bitmap ->
+        IntArray(bitmap.width * bitmap.height).also { bitmap.getPixels(it,0,bitmap.width,0,0,bitmap.width,bitmap.height) }
+    }
+    fun crossesEmptyOrOtherColor(a: Stitch, b: Stitch): Boolean {
+        val bitmap=p.extracted ?: return true
+        val pixels=mask ?: return true
+        val x0=a.x.toInt().coerceIn(0,bitmap.width-1)
+        val y0=a.y.toInt().coerceIn(0,bitmap.height-1)
+        val x1=b.x.toInt().coerceIn(0,bitmap.width-1)
+        val y1=b.y.toInt().coerceIn(0,bitmap.height-1)
+        val steps=maxOf(kotlin.math.abs(x1-x0),kotlin.math.abs(y1-y0))
+        if(steps==0) return false
+        val expected=ordered.firstOrNull { it.colorIdx==b.colorIdx }?.color ?: b.color
+        for(k in 1..steps) {
+            val x=x0+(x1-x0)*k/steps
+            val y=y0+(y1-y0)*k/steps
+            val pixel=pixels[y*bitmap.width+x]
+            if(android.graphics.Color.alpha(pixel)<=128) return true
+            // A large RGB discrepancy indicates crossing another color region.
+            if(expected!=0) {
+                val delta=kotlin.math.abs(android.graphics.Color.red(pixel)-android.graphics.Color.red(expected))+
+                    kotlin.math.abs(android.graphics.Color.green(pixel)-android.graphics.Color.green(expected))+
+                    kotlin.math.abs(android.graphics.Color.blue(pixel)-android.graphics.Color.blue(expected))
+                if(delta>180) return true
+            }
+        }
+        return false
+    }
     FileOutputStream(File(dir,safeName+".dst")).use { fos ->
         val hdr = ByteArray(512) { 0x20 }
         val colorChanges = ordered.zipWithNext().count { (a,b) -> a.colorIdx != b.colorIdx }
@@ -481,7 +511,8 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
             // Even short gaps need a jump, not a connecting thread.
             val jump=index==0 || (index>0 && (
                 st.colorIdx!=ordered[index-1].colorIdx ||
-                kotlin.math.abs(dx)>40 || kotlin.math.abs(dy)>40))
+                kotlin.math.abs(dx)>30 || kotlin.math.abs(dy)>30 ||
+                crossesEmptyOrOtherColor(ordered[index-1],st)))
             if(dx==0 && dy==0 && !jump) {
                 fos.write(tajimaRecord(0,0))
             }
