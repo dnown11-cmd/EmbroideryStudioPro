@@ -1,7 +1,7 @@
 name: Build APK
 on:
   push:
-    branches: [ main, feature/extraction-v4.2 ]
+    branches: [ main, feature/extraction-v4.2, feature/dst-safe-travel-v4.5 ]
   workflow_dispatch:
 jobs:
   build:
