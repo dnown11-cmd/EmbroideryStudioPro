@@ -231,7 +231,7 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
     var showCompare by remember{mutableStateOf(false)}
     var showPreview by remember{mutableStateOf(false)}
     var showMap by remember{mutableStateOf(false)}
-    val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->uri?.let{onUpdate(project.copy(imageUri=it))}}
+    val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->uri?.let{onUpdate(Project(name=project.name,imageUri=it))}}
     if(showCompare) ImageCompareDialog(project.extracted,project.extracted){showCompare=false}
     if(showPreview&&project.stitches.isNotEmpty()) ZoomablePreviewDialog(project.stitches,project.colors){showPreview=false}
     if(showMap&&project.stitches.isNotEmpty()) StitchMapDialog(project.stitches,project.colors){showMap=false}
@@ -250,13 +250,13 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
             }
         }
         item{StepCard(1,"استيراد صورة","اختر من المعرض",Color(0xFF9C6FDE),true){picker.launch("image/*")}}
-        item{StepCard(2,"استخراج النقشة","فصل ذكي متقدم عن الخلفية",Color(0xFF4FBEAA),project.imageUri!=null){scope.launch{onLoad(true,"جاري الاستخراج المتقدم...");val bm=loadBmp(ctx,project.imageUri!!);if(bm!=null)onUpdate(project.copy(extracted=extractPatternAuto(bm)));onLoad(false,"")}}}
-        item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E)),border=BorderStroke(if(project.extracted!=null)1.dp else 0.5.dp,if(project.extracted!=null)Color(0xFFDE9C6F) else Color(0xFF2A2A3E))){Column(Modifier.padding(14.dp)){Row(verticalAlignment=Alignment.CenterVertically){Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(if(project.extracted!=null)Color(0xFFDE9C6F).copy(0.2f) else Color(0xFF2A2A3E)),contentAlignment=Alignment.Center){Text("3",color=if(project.extracted!=null)Color(0xFFDE9C6F) else Color.Gray,fontSize=17.sp,fontWeight=FontWeight.Bold)};Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text("تحليل الألوان",color=if(project.extracted!=null)Color.White else Color.Gray,fontSize=14.sp,fontWeight=FontWeight.SemiBold);Text("32 لون — اختياري",color=Color.Gray,fontSize=11.sp)};if(project.extracted!=null)Button(onClick={scope.launch{onLoad(true,"جاري تحليل الألوان...");onUpdate(project.copy(colors=getColors(project.extracted!!)));onLoad(false,"")}},colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFDE9C6F)),contentPadding=androidx.compose.foundation.layout.PaddingValues(horizontal=12.dp,vertical=6.dp)){Text("تحليل",fontSize=12.sp)}};if(project.colors.isNotEmpty()){Spacer(Modifier.height(8.dp));LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){items(project.colors){c->Column(horizontalAlignment=Alignment.CenterHorizontally){Box(Modifier.size(28.dp).clip(CircleShape).background(Color(c)).border(1.dp,Color.White.copy(0.2f),CircleShape));Text("#${Integer.toHexString(c).takeLast(6).uppercase()}",color=Color.Gray,fontSize=7.sp)}}}}}}
+        item{StepCard(2,"استخراج النقشة","فصل ذكي متقدم عن الخلفية",Color(0xFF4FBEAA),project.imageUri!=null){scope.launch{onLoad(true,"جاري الاستخراج المتقدم...");val bm=loadBmp(ctx,project.imageUri!!);if(bm!=null)onUpdate(project.copy(extracted=extractPatternAuto(bm),colors=emptyList(),stitches=emptyList(),quality=null));onLoad(false,"")}}}
+        item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E)),border=BorderStroke(if(project.extracted!=null)1.dp else 0.5.dp,if(project.extracted!=null)Color(0xFFDE9C6F) else Color(0xFF2A2A3E))){Column(Modifier.padding(14.dp)){Row(verticalAlignment=Alignment.CenterVertically){Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(if(project.extracted!=null)Color(0xFFDE9C6F).copy(0.2f) else Color(0xFF2A2A3E)),contentAlignment=Alignment.Center){Text("3",color=if(project.extracted!=null)Color(0xFFDE9C6F) else Color.Gray,fontSize=17.sp,fontWeight=FontWeight.Bold)};Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text("تحليل الألوان",color=if(project.extracted!=null)Color.White else Color.Gray,fontSize=14.sp,fontWeight=FontWeight.SemiBold);Text("32 لون — اختياري",color=Color.Gray,fontSize=11.sp)};if(project.extracted!=null)Button(onClick={scope.launch{onLoad(true,"جاري تحليل الألوان...");onUpdate(project.copy(colors=getColors(project.extracted!!),stitches=emptyList(),quality=null));onLoad(false,"")}},colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFDE9C6F)),contentPadding=androidx.compose.foundation.layout.PaddingValues(horizontal=12.dp,vertical=6.dp)){Text("تحليل",fontSize=12.sp)}};if(project.colors.isNotEmpty()){Spacer(Modifier.height(8.dp));LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){items(project.colors){c->Column(horizontalAlignment=Alignment.CenterHorizontally){Box(Modifier.size(28.dp).clip(CircleShape).background(Color(c)).border(1.dp,Color.White.copy(0.2f),CircleShape));Text("#${Integer.toHexString(c).takeLast(6).uppercase()}",color=Color.Gray,fontSize=7.sp)}}}}}}
         }
         item{StepCard(4,"تحويل لغرز احترافية","Satin + Tatami + Run — دقة عالية",Color(0xFFDE6F6F),project.extracted!=null){scope.launch{onLoad(true,"جاري توليد الغرز الاحترافية...");val colors=project.colors.ifEmpty{getColors(project.extracted!!)};val s=genStitchesPro(project.extracted!!,colors,density.toInt());val q=calcQuality(project.extracted!!,s);onUpdate(project.copy(stitches=s,colors=colors,widthMM=project.extracted.width*0.1f,heightMM=project.extracted.height*0.1f,quality=q));onLoad(false,"")}}}
         if(project.stitches.isNotEmpty()) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Column(Modifier.padding(14.dp)){Row(horizontalArrangement=Arrangement.SpaceAround,modifier=Modifier.fillMaxWidth()){InfoItem("الغرز","${project.stitches.size}");InfoItem("العرض","${String.format("%.1f",project.widthMM)}مم");InfoItem("الارتفاع","${String.format("%.1f",project.heightMM)}مم");InfoItem("الألوان","${project.colors.size}")};project.quality?.let{q->Spacer(Modifier.height(6.dp));Row(horizontalArrangement=Arrangement.SpaceAround,modifier=Modifier.fillMaxWidth()){InfoItem("التغطية","${String.format("%.1f",q.coverage)}%");InfoItem("Satin","${q.satinCount}");InfoItem("Tatami","${q.tatamiCount}");InfoItem("Run","${q.runCount}")}};Spacer(Modifier.height(8.dp));Text("كثافة الغرز: ${density.toInt()} مم",color=Color.Gray,fontSize=12.sp);Slider(value=density,onValueChange={density=it},valueRange=2f..8f,steps=5,colors=SliderDefaults.colors(thumbColor=Color(0xFF9C6FDE),activeTrackColor=Color(0xFF9C6FDE)))}}}
         if(project.colors.isNotEmpty()&&project.stitches.isNotEmpty()) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Column(Modifier.padding(14.dp)){Text("ترتيب الألوان",color=Color.White,fontSize=13.sp,fontWeight=FontWeight.Bold);Spacer(Modifier.height(8.dp));project.colors.mapIndexed{i,c->Triple(i+1,c,project.stitches.count{it.colorIdx==i})}.sortedByDescending{it.third}.forEach{(num,color,count)->Row(Modifier.fillMaxWidth().padding(vertical=3.dp),verticalAlignment=Alignment.CenterVertically){Text("$num",color=Color.Gray,fontSize=11.sp,modifier=Modifier.width(20.dp));Box(Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).background(Color(color)).border(1.dp,Color.White.copy(0.2f),RoundedCornerShape(6.dp)));Spacer(Modifier.width(8.dp));Column(Modifier.weight(1f)){Text("#${Integer.toHexString(color).takeLast(6).uppercase()}",color=Color.White,fontSize=11.sp);Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF2A2A3E))){val ratio=if(project.stitches.isNotEmpty())count.toFloat()/project.stitches.size else 0f;Box(Modifier.fillMaxWidth(ratio).height(4.dp).background(Color(color)))}};Spacer(Modifier.width(8.dp));Text("$count",color=Color(0xFF9C6FDE),fontSize=11.sp)}}}}}
-        if(project.quality!=null) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A2A1A)),border=BorderStroke(1.dp,Color(0xFF4FDE9C))){Column(Modifier.padding(14.dp)){Text("📊 تقرير الجودة",color=Color(0xFF4FDE9C),fontSize=14.sp,fontWeight=FontWeight.Bold);Spacer(Modifier.height(6.dp));Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Column{Text("• الغرز: ${project.quality.totalStitches}",color=Color.White,fontSize=12.sp);Text("• Satin: ${project.quality.satinCount}",color=Color.White,fontSize=12.sp);Text("• Tatami: ${project.quality.tatamiCount}",color=Color.White,fontSize=12.sp);Text("• Run: ${project.quality.runCount}",color=Color.White,fontSize=12.sp)};Column{Text("• التغطية: ${String.format("%.1f",project.quality.coverage)}%",color=Color.White,fontSize=12.sp);Text("• تغيير ألوان: ${project.quality.colorChanges}",color=Color.White,fontSize=12.sp);Text("• IoU: ${String.format("%.3f",project.quality.coverage/100f)}",color=Color.White,fontSize=12.sp);Text("• جاهز للتصدير ✓",color=Color(0xFF4FDE9C),fontSize=12.sp)}}}}}
+        if(project.quality!=null) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A2A1A)),border=BorderStroke(1.dp,Color(0xFF4FDE9C))){Column(Modifier.padding(14.dp)){Text("📊 تقرير الجودة",color=Color(0xFF4FDE9C),fontSize=14.sp,fontWeight=FontWeight.Bold);Spacer(Modifier.height(6.dp));Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Column{Text("• الغرز: ${project.quality.totalStitches}",color=Color.White,fontSize=12.sp);Text("• Satin: ${project.quality.satinCount}",color=Color.White,fontSize=12.sp);Text("• Tatami: ${project.quality.tatamiCount}",color=Color.White,fontSize=12.sp);Text("• Run: ${project.quality.runCount}",color=Color.White,fontSize=12.sp)};Column{Text("• التغطية: ${String.format("%.1f",project.quality.coverage)}%",color=Color.White,fontSize=12.sp);Text("• تغيير ألوان: ${project.quality.colorChanges}",color=Color.White,fontSize=12.sp);Text("• يلزم فحص ملف DST على عارض غرز",color=Color(0xFFDE9C6F),fontSize=12.sp)}}}}}
         if(project.stitches.isNotEmpty()) item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){StepCard(5,"معاينة كاملة","محاكاة ماكينة ▶",Color(0xFF6F9CDE),true){showPreview=true}};Box(Modifier.weight(1f)){StepCard(0,"خريطة الغرز","Satin/Tatami/Run",Color(0xFFDE9C6F),true){showMap=true}}}}
         if(project.stitches.isNotEmpty()) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Canvas(Modifier.fillMaxWidth().height(220.dp).padding(8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0A0A14)).clickable{showPreview=true}){val mx=project.stitches.maxOfOrNull{it.x}?:1f;val my=project.stitches.maxOfOrNull{it.y}?:1f;val sc=minOf(size.width/mx,size.height/my)*0.88f;val ox=(size.width-mx*sc)/2f;val oy=(size.height-my*sc)/2f;project.stitches.take(10000).forEachIndexed{idx,st->val c=if(st.color!=0)Color(st.color) else if(st.colorIdx<project.colors.size)Color(project.colors[st.colorIdx]) else Color.Black;val sx=ox+st.x*sc;val sy=oy+st.y*sc;when(st.type){StitchType.SATIN->{val len=8f;drawLine(c,Offset(sx,sy),Offset(sx+cos(st.angle)*len,sy+sin(st.angle)*len),strokeWidth=3f,cap=StrokeCap.Round)};StitchType.RUN->{if(idx>0&&project.stitches[idx-1].colorIdx==st.colorIdx)drawLine(c,Offset(ox+project.stitches[idx-1].x*sc,oy+project.stitches[idx-1].y*sc),Offset(sx,sy),strokeWidth=1.5f,cap=StrokeCap.Round)};StitchType.TATAMI->drawCircle(c,2f,Offset(sx,sy))}}};Text("اضغط للمعاينة الكاملة مع محاكاة الماكينة ▶",color=Color.Gray,fontSize=11.sp,modifier=Modifier.padding(8.dp))}}
         item{StepCard(6,"تصدير DST و PNG","جاهز للماكينة",Color(0xFF6FDE9C),project.stitches.isNotEmpty()){scope.launch{onLoad(true,"جاري التصدير...");exportProject(ctx,project);onLoad(false,"")}}}
@@ -346,29 +346,86 @@ fun calcQuality(bm: Bitmap, stitches: List<Stitch>): QualityReport {
     val total=stitches.size;val w=bm.width;val h=bm.height;val px=IntArray(w*h);bm.getPixels(px,0,w,0,0,w,h)
     val totalSolid=px.count{android.graphics.Color.alpha(it)>128};val covered=stitches.map{it.y.toInt()*w+it.x.toInt()}.toSet().size
     val coverage=if(totalSolid>0)(covered.toFloat()/totalSolid*100f).coerceAtMost(100f) else 0f
-    val outOfBounds=stitches.count{it.x<0||it.y<0||it.x>=w||it.y>=h}.toFloat()/total*100f
+    val outOfBounds=if(total>0)stitches.count{it.x<0||it.y<0||it.x>=w||it.y>=h}.toFloat()/total*100f else 0f
     val colorChanges=stitches.zipWithNext().count{(a,b)->a.colorIdx!=b.colorIdx}
     return QualityReport(total,coverage,outOfBounds,stitches.map{it.colorIdx}.toSet().size,w*0.1f,h*0.1f,stitches.count{it.type==StitchType.SATIN},stitches.count{it.type==StitchType.RUN},stitches.count{it.type==StitchType.TATAMI},colorChanges)
 }
 
+
+private fun tajimaRecord(dx: Int, dy: Int, command: Int = 0x03): ByteArray {
+    require(dx in -121..121 && dy in -121..121)
+    val b=IntArray(3)
+    fun axis(value: Int, weights: IntArray, positive: IntArray, negative: IntArray, indices: IntArray) {
+        var remainder=value
+        for(i in weights.indices) {
+            val weight=weights[i]
+            if(remainder>weight/2){b[indices[i]]=b[indices[i]] or positive[i];remainder-=weight}
+            else if(remainder< -weight/2){b[indices[i]]=b[indices[i]] or negative[i];remainder+=weight}
+        }
+        require(remainder==0)
+    }
+    val weights=intArrayOf(81,27,9,3,1)
+    val indices=intArrayOf(2,1,0,1,0)
+    axis(dx,weights,intArrayOf(0x04,0x04,0x04,0x01,0x01),intArrayOf(0x08,0x08,0x08,0x02,0x02),indices)
+    axis(dy,weights,intArrayOf(0x20,0x20,0x20,0x80,0x80),intArrayOf(0x10,0x10,0x10,0x40,0x40),indices)
+    b[2]=b[2] or command
+    return byteArrayOf(b[0].toByte(),b[1].toByte(),b[2].toByte())
+}
+
 suspend fun exportProject(ctx: android.content.Context, p: Project) = withContext(Dispatchers.IO) {
-    val dir=ctx.getExternalFilesDir(null)?:return@withContext
-    p.extracted?.let{bm->FileOutputStream(File(dir,"${p.name}.png")).use{bm.compress(Bitmap.CompressFormat.PNG,100,it)}}
-    if(p.stitches.isNotEmpty()){FileOutputStream(File(dir,"${p.name}.dst")).use{fos->val hdr=ByteArray(512){0x20};val lbl="LA:${p.name}".toByteArray();System.arraycopy(lbl,0,hdr,0,minOf(lbl.size,16));fos.write(hdr);var lx=0;var ly=0;p.stitches.forEach{s->val dx=(s.x-lx).toInt().coerceIn(-121,121);val dy=(s.y-ly).toInt().coerceIn(-121,121);lx+=dx;ly+=dy;fos.write(byteArrayOf(dx.toByte(),dy.toByte(),0x03))};fos.write(byteArrayOf(0x00,0x00,0xF3.toByte()))}}
+    require(p.stitches.isNotEmpty()) {"No stitches to export"}
+    val dir=ctx.getExternalFilesDir(null)?:error("Export directory unavailable")
+    val safeName=p.name.replace(Regex("[^\\p{L}\\p{N} _.-]"),"_").take(70).ifBlank{"embroidery"}
+    p.extracted?.let{bm->FileOutputStream(File(dir,safeName+".png")).use{bm.compress(Bitmap.CompressFormat.PNG,100,it)}}
+    FileOutputStream(File(dir,safeName+".dst")).use{fos->
+        val hdr=ByteArray(512){0x20}
+        val header=("LA:"+safeName.take(12)+"\rST:"+p.stitches.size.toString().padStart(7,' ')+"\rCO:"+p.stitches.zipWithNext().count{(a,b)->a.colorIdx!=b.colorIdx}.toString().padStart(3,' ')+"\r")
+        val hb=header.toByteArray(Charsets.US_ASCII)
+        System.arraycopy(hb,0,hdr,0,minOf(hb.size,511))
+        hdr[511]=0x1A;fos.write(hdr)
+        var lastX=0;var lastY=0;var lastColor=p.stitches.first().colorIdx
+        val scaleX=if(p.widthMM>0f && p.extracted!=null) p.widthMM*10f/p.extracted.width else 1f
+        val scaleY=if(p.heightMM>0f && p.extracted!=null) p.heightMM*10f/p.extracted.height else scaleX
+        p.stitches.forEachIndexed{index,st->
+            if(index>0 && st.colorIdx!=lastColor){fos.write(tajimaRecord(0,0,0xC3));lastColor=st.colorIdx}
+            val targetX=(st.x*scaleX).toInt()
+            val targetY= -(st.y*scaleY).toInt()
+            var dx=targetX-lastX;var dy=targetY-lastY
+            val isJump=kotlin.math.abs(dx)>121 || kotlin.math.abs(dy)>121
+            if(dx==0 && dy==0)fos.write(tajimaRecord(0,0))
+            while(dx!=0 || dy!=0){
+                val sx=dx.coerceIn(-121,121);val sy=dy.coerceIn(-121,121)
+                fos.write(tajimaRecord(sx,sy,if(isJump)0x83 else 0x03))
+                dx-=sx;dy-=sy
+            }
+            lastX=targetX;lastY=targetY
+        }
+        fos.write(byteArrayOf(0,0,0xF3.toByte()))
+    }
 }
 
 suspend fun saveProject(ctx: android.content.Context, p: Project) = withContext(Dispatchers.IO) {
     val dir=File(ctx.filesDir,"projects");dir.mkdirs()
     val json=JSONObject().apply{put("id",p.id);put("name",p.name);put("savedAt",p.savedAt);put("widthMM",p.widthMM);put("heightMM",p.heightMM);put("stitchCount",p.stitches.size);put("colorCount",p.colors.size);val ca=JSONArray();p.colors.forEach{ca.put(it)};put("colors",ca)}
-    File(dir,"${p.id}.json").writeText(json.toString())
+    File(dir,p.id+".json").writeText(json.toString())
+    java.io.DataOutputStream(java.io.BufferedOutputStream(FileOutputStream(File(dir,p.id+".stitches")))).use{out->
+        out.writeInt(0x4E515348);out.writeInt(p.stitches.size)
+        p.stitches.forEach{st->out.writeFloat(st.x);out.writeFloat(st.y);out.writeInt(st.colorIdx);out.writeInt(st.color);out.writeByte(st.type.ordinal);out.writeFloat(st.angle)}
+    }
     p.extracted?.let{bm->FileOutputStream(File(dir,"${p.id}.png")).use{bm.compress(Bitmap.CompressFormat.PNG,100,it)}}
 }
 
 suspend fun loadProjects(ctx: android.content.Context): List<Project> = withContext(Dispatchers.IO) {
     val dir=File(ctx.filesDir,"projects");if(!dir.exists()) return@withContext emptyList()
-    dir.listFiles{f->f.extension=="json"}?.mapNotNull{f->try{val json=JSONObject(f.readText());val colors=mutableListOf<Int>();val arr=json.getJSONArray("colors");for(i in 0 until arr.length())colors.add(arr.getInt(i));val imgFile=File(dir,"${json.getString("id")}.png");val bm=if(imgFile.exists())BitmapFactory.decodeFile(imgFile.absolutePath) else null;Project(id=json.getString("id"),name=json.getString("name"),extracted=bm,colors=colors,widthMM=json.getDouble("widthMM").toFloat(),heightMM=json.getDouble("heightMM").toFloat(),savedAt=json.getLong("savedAt"))}catch(e:Exception){null}}?.sortedByDescending{it.savedAt}?:emptyList()
+    dir.listFiles{f->f.extension=="json"}?.mapNotNull{f->try{val json=JSONObject(f.readText());val colors=mutableListOf<Int>();val arr=json.getJSONArray("colors");for(i in 0 until arr.length())colors.add(arr.getInt(i));val imgFile=File(dir,"${json.getString("id")}.png");val bm=if(imgFile.exists())BitmapFactory.decodeFile(imgFile.absolutePath) else null;val sf=File(dir,json.getString("id")+".stitches")
+        val stitches=if(sf.exists())try{java.io.DataInputStream(java.io.BufferedInputStream(sf.inputStream())).use{input->
+            require(input.readInt()==0x4E515348)
+            val count=input.readInt();require(count in 0..2000000)
+            List(count){Stitch(input.readFloat(),input.readFloat(),input.readInt(),input.readInt(),StitchType.values()[input.readUnsignedByte()],input.readFloat())}
+        }}catch(e:Exception){emptyList()} else emptyList()
+        Project(id=json.getString("id"),name=json.getString("name"),extracted=bm,colors=colors,stitches=stitches,widthMM=json.getDouble("widthMM").toFloat(),heightMM=json.getDouble("heightMM").toFloat(),savedAt=json.getLong("savedAt"))}catch(e:Exception){null}}?.sortedByDescending{it.savedAt}?:emptyList()
 }
 
 suspend fun deleteProject(ctx: android.content.Context, id: String) = withContext(Dispatchers.IO) {
-    val dir=File(ctx.filesDir,"projects");File(dir,"$id.json").delete();File(dir,"$id.png").delete()
+    val dir=File(ctx.filesDir,"projects");File(dir,"$id.json").delete();File(dir,"$id.png").delete();File(dir,"$id.stitches").delete()
 }

@@ -12,6 +12,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install required Android platform
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
       - name: Build Release APK
         run: |
           chmod +x gradlew
