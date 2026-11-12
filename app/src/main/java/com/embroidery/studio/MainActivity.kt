@@ -291,16 +291,85 @@ fun SettingsScreen() {
 suspend fun loadBmp(ctx: android.content.Context, uri: Uri): Bitmap? = withContext(Dispatchers.IO){try{ctx.contentResolver.openInputStream(uri)?.let{BitmapFactory.decodeStream(it)}}catch(e:Exception){null}}
 
 suspend fun extractPatternAuto(bm: Bitmap): Bitmap = withContext(Dispatchers.Default) {
-    val w=bm.width;val h=bm.height;val out=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);val px=IntArray(w*h);bm.getPixels(px,0,w,0,0,w,h)
-    val edgeColors=mutableMapOf<Int,Int>()
-    for(x in 0 until w){listOf(px[x],px[(h-1)*w+x]).forEach{c->val q=android.graphics.Color.rgb((android.graphics.Color.red(c)/8)*8,(android.graphics.Color.green(c)/8)*8,(android.graphics.Color.blue(c)/8)*8);edgeColors[q]=(edgeColors[q]?:0)+1}}
-    for(y in 0 until h){listOf(px[y*w],px[y*w+w-1]).forEach{c->val q=android.graphics.Color.rgb((android.graphics.Color.red(c)/8)*8,(android.graphics.Color.green(c)/8)*8,(android.graphics.Color.blue(c)/8)*8);edgeColors[q]=(edgeColors[q]?:0)+1}}
-    val bgColor=edgeColors.maxByOrNull{it.value}?.key?:px[0]
-    val bgR=android.graphics.Color.red(bgColor);val bgG=android.graphics.Color.green(bgColor);val bgB=android.graphics.Color.blue(bgColor)
-    for(i in px.indices){val r=android.graphics.Color.red(px[i]);val g=android.graphics.Color.green(px[i]);val b=android.graphics.Color.blue(px[i]);px[i]=if(abs(r-bgR)+abs(g-bgG)+abs(b-bgB)>40)px[i] else android.graphics.Color.TRANSPARENT}
-    val cleaned=px.copyOf()
-    for(y in 1 until h-1) for(x in 1 until w-1){val idx=y*w+x;if(android.graphics.Color.alpha(px[idx])>0){val nb=listOf(px[idx-1],px[idx+1],px[idx-w],px[idx+w]).count{android.graphics.Color.alpha(it)>0};if(nb<2)cleaned[idx]=android.graphics.Color.TRANSPARENT}}
-    out.setPixels(cleaned,0,w,0,0,w,h);out
+    // Preserve original RGB and internal holes. Remove only background connected
+    // to the image border; unlike global color deletion, this protects motifs.
+    val w = bm.width
+    val h = bm.height
+    require(w > 0 && h > 0 && w.toLong() * h.toLong() <= 25_000_000L) {
+        "Image dimensions are unsupported"
+    }
+    val count = w * h
+    val pixels = IntArray(count)
+    bm.getPixels(pixels, 0, w, 0, 0, w, h)
+    val histogram = HashMap<Int, Int>()
+    fun bucket(c: Int): Int {
+        val r = android.graphics.Color.red(c) / 16
+        val g = android.graphics.Color.green(c) / 16
+        val b = android.graphics.Color.blue(c) / 16
+        return (r shl 8) or (g shl 4) or b
+    }
+    fun vote(index: Int) {
+        val c = pixels[index]
+        if (android.graphics.Color.alpha(c) < 16) return
+        val k = bucket(c)
+        histogram[k] = (histogram[k] ?: 0) + 1
+    }
+    for (x in 0 until w) { vote(x); vote((h - 1) * w + x) }
+    for (y in 0 until h) { vote(y * w); vote(y * w + w - 1) }
+    val dominant = histogram.maxByOrNull { it.value }?.key
+    if (dominant == null) {
+        return@withContext Bitmap.createBitmap(bm).copy(Bitmap.Config.ARGB_8888, true)
+    }
+    val br = ((dominant shr 8) and 15) * 16 + 8
+    val bg = ((dominant shr 4) and 15) * 16 + 8
+    val bb = (dominant and 15) * 16 + 8
+    fun isBackground(index: Int): Boolean {
+        val c = pixels[index]
+        if (android.graphics.Color.alpha(c) < 16) return true
+        val dr = android.graphics.Color.red(c) - br
+        val dg = android.graphics.Color.green(c) - bg
+        val db = android.graphics.Color.blue(c) - bb
+        return dr * dr + dg * dg + db * db <= 38 * 38
+    }
+    val visited = BooleanArray(count)
+    val queue = IntArray(count)
+    var head = 0
+    var tail = 0
+    fun enqueue(index: Int) {
+        if (!visited[index] && isBackground(index)) {
+            visited[index] = true
+            queue[tail++] = index
+        }
+    }
+    for (x in 0 until w) { enqueue(x); enqueue((h - 1) * w + x) }
+    for (y in 0 until h) { enqueue(y * w); enqueue(y * w + w - 1) }
+    while (head < tail) {
+        val i = queue[head++]
+        val x = i % w
+        if (x > 0) enqueue(i - 1)
+        if (x + 1 < w) enqueue(i + 1)
+        if (i >= w) enqueue(i - w)
+        if (i < count - w) enqueue(i + w)
+    }
+    for (i in pixels.indices) {
+        if (visited[i]) pixels[i] = android.graphics.Color.TRANSPARENT
+    }
+    // Remove isolated one-pixel specks only; do not join disconnected motifs.
+    val cleaned = pixels.copyOf()
+    for (y in 1 until h - 1) for (x in 1 until w - 1) {
+        val i = y * w + x
+        if (android.graphics.Color.alpha(pixels[i]) == 0) continue
+        var neighbors = 0
+        for (dy in -1..1) for (dx in -1..1) {
+            if (dx != 0 || dy != 0) {
+                if (android.graphics.Color.alpha(pixels[i + dy * w + dx]) > 0) neighbors++
+            }
+        }
+        if (neighbors == 0) cleaned[i] = android.graphics.Color.TRANSPARENT
+    }
+    Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply {
+        setPixels(cleaned, 0, w, 0, 0, w, h)
+    }
 }
 
 suspend fun getColors(bm: Bitmap): List<Int> = withContext(Dispatchers.Default) {
