@@ -482,10 +482,22 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
             val targetX=(st.x*scaleX).toInt()
             val targetY= -(st.y*scaleY).toInt()
             var dx=targetX-lastX;var dy=targetY-lastY
-            // A disconnected region must never be sewn together merely because
-            // its distance happens to be less than the DST 12.1 mm record limit.
-            val distanceMM = kotlin.math.hypot(dx.toDouble(), dy.toDouble()) / 10.0
-            val isJump = index == 0 || distanceMM > 5.0 || (index > 0 && st.type != p.stitches[index-1].type && distanceMM > 2.0)
+            // Check every pixel of the transition: never stitch through a transparent
+            // hole or through another thread color, even when the gap is short.
+            val previous=if(index>0)p.stitches[index-1] else null
+            var continuous=previous!=null && previous.colorIdx==st.colorIdx
+            if(continuous && previous!=null && p.extracted!=null){
+                val bitmap=p.extracted
+                val x0=previous.x.toInt();val y0=previous.y.toInt()
+                val x1=st.x.toInt();val y1=st.y.toInt()
+                val steps=maxOf(kotlin.math.abs(x1-x0),kotlin.math.abs(y1-y0),1)
+                if(steps>45)continuous=false
+                else for(k in 0..steps){
+                    val px=x0+(x1-x0)*k/steps;val py=y0+(y1-y0)*k/steps
+                    if(px !in 0 until bitmap.width || py !in 0 until bitmap.height || android.graphics.Color.alpha(bitmap.getPixel(px,py))<160){continuous=false;break}
+                }
+            }
+            val isJump=!continuous
             if(dx==0 && dy==0)fos.write(tajimaRecord(0,0))
             while(dx!=0 || dy!=0){
                 val sx=dx.coerceIn(-121,121);val sy=dy.coerceIn(-121,121)
