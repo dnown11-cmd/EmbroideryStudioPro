@@ -408,19 +408,58 @@ fun calcStitchAngle(px: IntArray, w: Int, h: Int, x: Int, y: Int): Float {
 }
 
 suspend fun genStitchesPro(bm: Bitmap, colors: List<Int>, density: Int=4): List<Stitch> = withContext(Dispatchers.Default) {
-    val list=mutableListOf<Stitch>();val w=bm.width;val h=bm.height;val px=IntArray(w*h);bm.getPixels(px,0,w,0,0,w,h);val step=kotlin.math.max(1, kotlin.math.round(w * density.coerceIn(2,8) * 0.1f / 150f).toInt())
-    for(y in 0 until h step step){val lr=(y/step)%2==0;val xs=if(lr) 0 until w step step else w-1 downTo 0 step step
-        for(x in xs){val p=px[y*w+x];if(android.graphics.Color.alpha(p)>128){
-            val pixelColor=p
-            var md=Int.MAX_VALUE;var ni=0
-            colors.forEachIndexed{i,c->val d=(android.graphics.Color.red(p)-android.graphics.Color.red(c)).let{it*it}+(android.graphics.Color.green(p)-android.graphics.Color.green(c)).let{it*it}+(android.graphics.Color.blue(p)-android.graphics.Color.blue(c)).let{it*it};if(d<md){md=d;ni=i}}
-            val isEdge=isEdgePixel(px,w,h,x,y)
-            val lineWidth=getPixelWidth(px,w,h,x,y)
-            val type=when{lineWidth<=3->StitchType.RUN;isEdge&&step<=4->StitchType.SATIN;isEdge->StitchType.RUN;else->StitchType.TATAMI}
-            val angle=if(type==StitchType.SATIN)calcStitchAngle(px,w,h,x,y) else 0f
-            list.add(Stitch(x.toFloat(),y.toFloat(),ni,pixelColor,type,angle))
-        }}
-    };list
+    // Raster-to-stitch planning: fill only foreground spans, never the full canvas.
+    // Each scanline span is a distinct sewing segment. DST export emits jumps
+    // whenever travel crosses transparency or another thread region.
+    val w=bm.width; val h=bm.height
+    val pixels=IntArray(w*h); bm.getPixels(pixels,0,w,0,0,w,h)
+    val palette=colors.ifEmpty { getColors(bm) }
+    if(palette.isEmpty()) return@withContext emptyList<Stitch>()
+    val labels=IntArray(w*h){-1}
+    for(i in pixels.indices) {
+        val p=pixels[i]
+        if(android.graphics.Color.alpha(p)<=128) continue
+        var best=Int.MAX_VALUE; var selected=0
+        palette.forEachIndexed { j,c ->
+            val dr=android.graphics.Color.red(p)-android.graphics.Color.red(c)
+            val dg=android.graphics.Color.green(p)-android.graphics.Color.green(c)
+            val db=android.graphics.Color.blue(p)-android.graphics.Color.blue(c)
+            val distance=dr*dr+dg*dg+db*db
+            if(distance<best){best=distance;selected=j}
+        }
+        labels[i]=selected
+    }
+    // A 150 mm-wide design: 0.35-0.65 mm row spacing; max 2.5 mm stitch length.
+    val pxPerMM=w/150f
+    val rowStep=kotlin.math.max(1,kotlin.math.round(pxPerMM*(0.25f+density.coerceIn(2,8)*0.05f)).toInt())
+    val maxStep=kotlin.math.max(1,kotlin.math.round(pxPerMM*2.5f).toInt())
+    val stitches=ArrayList<Stitch>()
+    for(colorIndex in palette.indices) {
+        var reverse=false
+        for(y in 0 until h step rowStep) {
+            val spans=ArrayList<Pair<Int,Int>>()
+            var x=0
+            while(x<w) {
+                if(labels[y*w+x]!=colorIndex){x++;continue}
+                val start=x
+                while(x<w && labels[y*w+x]==colorIndex)x++
+                if(x-start>=2)spans.add(start to x-1)
+            }
+            val ordered=if(reverse)spans.asReversed() else spans
+            for((left,right) in ordered) {
+                val from=if(reverse)right else left
+                val to=if(reverse)left else right
+                val distance=kotlin.math.abs(to-from)
+                val count=kotlin.math.max(1,(distance+maxStep-1)/maxStep)
+                for(k in 0..count) {
+                    val sx=from+(to-from)*k/count
+                    stitches.add(Stitch(sx.toFloat(),y.toFloat(),colorIndex,palette[colorIndex],StitchType.TATAMI,0f))
+                }
+            }
+            reverse=!reverse
+        }
+    }
+    stitches
 }
 
 fun calcQuality(bm: Bitmap, stitches: List<Stitch>): QualityReport {
