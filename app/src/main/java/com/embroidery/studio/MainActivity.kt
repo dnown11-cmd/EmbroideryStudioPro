@@ -202,7 +202,7 @@ fun StitchMapDialog(stitches: List<Stitch>, colors: List<Int>, onDismiss: () -> 
                     when(st.type){
                         StitchType.SATIN->{val len=10f;drawLine(c,Offset(sx,sy),Offset(sx+cos(st.angle)*len,sy+sin(st.angle)*len),strokeWidth=3.5f,cap=StrokeCap.Round)}
                         StitchType.RUN->{if(idx>0&&stitches[idx-1].colorIdx==st.colorIdx)drawLine(c,Offset(ox+stitches[idx-1].x*sc,oy+stitches[idx-1].y*sc),Offset(sx,sy),strokeWidth=2f,cap=StrokeCap.Round)}
-                        StitchType.TATAMI->{if(idx>0&&project.stitches[idx-1].colorIdx==st.colorIdx){val prev=project.stitches[idx-1];val dx=st.x-prev.x;val dy=st.y-prev.y;if(kotlin.math.sqrt(dx*dx+dy*dy)*150f/mx.coerceAtLeast(1f)<=3f)drawLine(c,Offset(ox+prev.x*sc,oy+prev.y*sc),Offset(sx,sy),strokeWidth=1.5f,cap=StrokeCap.Round)}}
+                        StitchType.TATAMI->{if(idx>0&&stitches[idx-1].colorIdx==st.colorIdx){val prev=stitches[idx-1];val dx=st.x-prev.x;val dy=st.y-prev.y;if(kotlin.math.sqrt(dx*dx+dy*dy)*150f/mx.coerceAtLeast(1f)<=3f)drawLine(c,Offset(ox+prev.x*sc,oy+prev.y*sc),Offset(sx,sy),strokeWidth=1.5f,cap=StrokeCap.Round)}}
                     }
                 }
             }
