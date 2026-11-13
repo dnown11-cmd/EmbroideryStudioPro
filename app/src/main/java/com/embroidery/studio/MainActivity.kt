@@ -195,7 +195,7 @@ fun StitchMapDialog(stitches: List<Stitch>, colors: List<Int>, onDismiss: () -> 
                     when(st.type){
                         StitchType.SATIN->{val len=10f;drawLine(c,Offset(sx,sy),Offset(sx+cos(st.angle)*len,sy+sin(st.angle)*len),strokeWidth=3.5f,cap=StrokeCap.Round)}
                         StitchType.RUN->{if(idx>0&&stitches[idx-1].colorIdx==st.colorIdx)drawLine(c,Offset(ox+stitches[idx-1].x*sc,oy+stitches[idx-1].y*sc),Offset(sx,sy),strokeWidth=2f,cap=StrokeCap.Round)}
-                        StitchType.TATAMI->drawCircle(c,2f,Offset(sx,sy))
+                        StitchType.TATAMI->{if(idx>0){val prev=project.stitches[idx-1];if(prev.colorIdx==st.colorIdx && kotlin.math.hypot((prev.x-st.x).toDouble(),(prev.y-st.y).toDouble())<45.0)drawLine(c,Offset(ox+prev.x*sc,oy+prev.y*sc),Offset(sx,sy),strokeWidth=1.6f,cap=StrokeCap.Round)}}
                     }
                 }
             }
@@ -231,6 +231,7 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
     var showCompare by remember{mutableStateOf(false)}
     var showPreview by remember{mutableStateOf(false)}
     var showMap by remember{mutableStateOf(false)}
+    var colorsExpanded by remember{mutableStateOf(false)}
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->uri?.let{onUpdate(Project(name=project.name,imageUri=it))}}
     if(showCompare) ImageCompareDialog(project.extracted,project.extracted){showCompare=false}
     if(showPreview&&project.stitches.isNotEmpty()) ZoomablePreviewDialog(project.stitches,project.colors){showPreview=false}
@@ -255,10 +256,10 @@ fun HomeScreen(project: Project, loading: Boolean, msg: String, onUpdate: (Proje
         }
         item{StepCard(4,"تحويل لغرز احترافية","Satin + Tatami + Run — دقة عالية",Color(0xFFDE6F6F),project.extracted!=null){scope.launch{onLoad(true,"جاري توليد الغرز الاحترافية...");val colors=project.colors.ifEmpty{getColors(project.extracted!!)};val s=genStitchesPro(project.extracted!!,colors,density.toInt());val q=calcQuality(project.extracted!!,s);onUpdate(project.copy(stitches=s,colors=colors,widthMM=project.extracted.width*0.1f,heightMM=project.extracted.height*0.1f,quality=q));onLoad(false,"")}}}
         if(project.stitches.isNotEmpty()) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Column(Modifier.padding(14.dp)){Row(horizontalArrangement=Arrangement.SpaceAround,modifier=Modifier.fillMaxWidth()){InfoItem("الغرز","${project.stitches.size}");InfoItem("العرض","${String.format("%.1f",project.widthMM)}مم");InfoItem("الارتفاع","${String.format("%.1f",project.heightMM)}مم");InfoItem("الألوان","${project.colors.size}")};project.quality?.let{q->Spacer(Modifier.height(6.dp));Row(horizontalArrangement=Arrangement.SpaceAround,modifier=Modifier.fillMaxWidth()){InfoItem("التغطية","${String.format("%.1f",q.coverage)}%");InfoItem("Satin","${q.satinCount}");InfoItem("Tatami","${q.tatamiCount}");InfoItem("Run","${q.runCount}")}};Spacer(Modifier.height(8.dp));Text("كثافة الغرز: ${density.toInt()} مم",color=Color.Gray,fontSize=12.sp);Slider(value=density,onValueChange={density=it},valueRange=2f..8f,steps=5,colors=SliderDefaults.colors(thumbColor=Color(0xFF9C6FDE),activeTrackColor=Color(0xFF9C6FDE)))}}}
-        if(project.colors.isNotEmpty()&&project.stitches.isNotEmpty()) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Column(Modifier.padding(14.dp)){Text("ترتيب الألوان",color=Color.White,fontSize=13.sp,fontWeight=FontWeight.Bold);Spacer(Modifier.height(8.dp));project.colors.mapIndexed{i,c->Triple(i+1,c,project.stitches.count{it.colorIdx==i})}.sortedByDescending{it.third}.forEach{(num,color,count)->Row(Modifier.fillMaxWidth().padding(vertical=3.dp),verticalAlignment=Alignment.CenterVertically){Text("$num",color=Color.Gray,fontSize=11.sp,modifier=Modifier.width(20.dp));Box(Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).background(Color(color)).border(1.dp,Color.White.copy(0.2f),RoundedCornerShape(6.dp)));Spacer(Modifier.width(8.dp));Column(Modifier.weight(1f)){Text("#${Integer.toHexString(color).takeLast(6).uppercase()}",color=Color.White,fontSize=11.sp);Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF2A2A3E))){val ratio=if(project.stitches.isNotEmpty())count.toFloat()/project.stitches.size else 0f;Box(Modifier.fillMaxWidth(ratio).height(4.dp).background(Color(color)))}};Spacer(Modifier.width(8.dp));Text("$count",color=Color(0xFF9C6FDE),fontSize=11.sp)}}}}}
+        if(project.colors.isNotEmpty()&&project.stitches.isNotEmpty()) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Column(Modifier.padding(14.dp)){Text(if(colorsExpanded) "ترتيب الألوان ▲" else "ترتيب الألوان ▼",color=Color.White,fontSize=13.sp,fontWeight=FontWeight.Bold,modifier=Modifier.fillMaxWidth().clickable{colorsExpanded=!colorsExpanded});Spacer(Modifier.height(8.dp));if(colorsExpanded)project.colors.mapIndexed{i,c->Triple(i+1,c,project.stitches.count{it.colorIdx==i})}.sortedByDescending{it.third}.forEach{(num,color,count)->Row(Modifier.fillMaxWidth().padding(vertical=3.dp),verticalAlignment=Alignment.CenterVertically){Text("$num",color=Color.Gray,fontSize=11.sp,modifier=Modifier.width(20.dp));Box(Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).background(Color(color)).border(1.dp,Color.White.copy(0.2f),RoundedCornerShape(6.dp)));Spacer(Modifier.width(8.dp));Column(Modifier.weight(1f)){Text("${embroideryColorName(color)} • #${Integer.toHexString(color).takeLast(6).uppercase()}",color=Color.White,fontSize=11.sp);Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF2A2A3E))){val ratio=if(project.stitches.isNotEmpty())count.toFloat()/project.stitches.size else 0f;Box(Modifier.fillMaxWidth(ratio).height(4.dp).background(Color(color)))}};Spacer(Modifier.width(8.dp));Text("$count",color=Color(0xFF9C6FDE),fontSize=11.sp)}}}}}
         if(project.quality!=null) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A2A1A)),border=BorderStroke(1.dp,Color(0xFF4FDE9C))){Column(Modifier.padding(14.dp)){Text("📊 تقرير الجودة",color=Color(0xFF4FDE9C),fontSize=14.sp,fontWeight=FontWeight.Bold);Spacer(Modifier.height(6.dp));Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Column{Text("• الغرز: ${project.quality.totalStitches}",color=Color.White,fontSize=12.sp);Text("• Satin: ${project.quality.satinCount}",color=Color.White,fontSize=12.sp);Text("• Tatami: ${project.quality.tatamiCount}",color=Color.White,fontSize=12.sp);Text("• Run: ${project.quality.runCount}",color=Color.White,fontSize=12.sp)};Column{Text("• التغطية: ${String.format("%.1f",project.quality.coverage)}%",color=Color.White,fontSize=12.sp);Text("• تغيير ألوان: ${project.quality.colorChanges}",color=Color.White,fontSize=12.sp);Text("• يلزم فحص ملف DST على عارض غرز",color=Color(0xFFDE9C6F),fontSize=12.sp)}}}}}
         if(project.stitches.isNotEmpty()) item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){StepCard(5,"معاينة كاملة","محاكاة ماكينة ▶",Color(0xFF6F9CDE),true){showPreview=true}};Box(Modifier.weight(1f)){StepCard(0,"خريطة الغرز","Satin/Tatami/Run",Color(0xFFDE9C6F),true){showMap=true}}}}
-        if(project.stitches.isNotEmpty()) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Canvas(Modifier.fillMaxWidth().height(220.dp).padding(8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0A0A14)).clickable{showPreview=true}){val mx=project.stitches.maxOfOrNull{it.x}?:1f;val my=project.stitches.maxOfOrNull{it.y}?:1f;val sc=minOf(size.width/mx,size.height/my)*0.88f;val ox=(size.width-mx*sc)/2f;val oy=(size.height-my*sc)/2f;project.stitches.take(10000).forEachIndexed{idx,st->val c=if(st.color!=0)Color(st.color) else if(st.colorIdx<project.colors.size)Color(project.colors[st.colorIdx]) else Color.Black;val sx=ox+st.x*sc;val sy=oy+st.y*sc;when(st.type){StitchType.SATIN->{val len=8f;drawLine(c,Offset(sx,sy),Offset(sx+cos(st.angle)*len,sy+sin(st.angle)*len),strokeWidth=3f,cap=StrokeCap.Round)};StitchType.RUN->{if(idx>0&&project.stitches[idx-1].colorIdx==st.colorIdx)drawLine(c,Offset(ox+project.stitches[idx-1].x*sc,oy+project.stitches[idx-1].y*sc),Offset(sx,sy),strokeWidth=1.5f,cap=StrokeCap.Round)};StitchType.TATAMI->drawCircle(c,2f,Offset(sx,sy))}}};Text("اضغط للمعاينة الكاملة مع محاكاة الماكينة ▶",color=Color.Gray,fontSize=11.sp,modifier=Modifier.padding(8.dp))}}
+        if(project.stitches.isNotEmpty()) item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Canvas(Modifier.fillMaxWidth().height(220.dp).padding(8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0A0A14)).clickable{showPreview=true}){val mx=project.stitches.maxOfOrNull{it.x}?:1f;val my=project.stitches.maxOfOrNull{it.y}?:1f;val sc=minOf(size.width/mx,size.height/my)*0.88f;val ox=(size.width-mx*sc)/2f;val oy=(size.height-my*sc)/2f;project.stitches.take(10000).forEachIndexed{idx,st->val c=if(st.color!=0)Color(st.color) else if(st.colorIdx<project.colors.size)Color(project.colors[st.colorIdx]) else Color.Black;val sx=ox+st.x*sc;val sy=oy+st.y*sc;when(st.type){StitchType.SATIN->{val len=8f;drawLine(c,Offset(sx,sy),Offset(sx+cos(st.angle)*len,sy+sin(st.angle)*len),strokeWidth=3f,cap=StrokeCap.Round)};StitchType.RUN->{if(idx>0&&project.stitches[idx-1].colorIdx==st.colorIdx)drawLine(c,Offset(ox+project.stitches[idx-1].x*sc,oy+project.stitches[idx-1].y*sc),Offset(sx,sy),strokeWidth=1.5f,cap=StrokeCap.Round)};StitchType.TATAMI->{if(idx>0){val prev=project.stitches[idx-1];if(prev.colorIdx==st.colorIdx && kotlin.math.hypot((prev.x-st.x).toDouble(),(prev.y-st.y).toDouble())<45.0)drawLine(c,Offset(ox+prev.x*sc,oy+prev.y*sc),Offset(sx,sy),strokeWidth=1.6f,cap=StrokeCap.Round)}}}}};Text("اضغط للمعاينة الكاملة مع محاكاة الماكينة ▶",color=Color.Gray,fontSize=11.sp,modifier=Modifier.padding(8.dp))}}
         item{StepCard(6,"تصدير DST و PNG","جاهز للماكينة",Color(0xFF6FDE9C),project.stitches.isNotEmpty()){scope.launch{onLoad(true,"جاري التصدير...");exportProject(ctx,project);onLoad(false,"")}}}
         item{Spacer(Modifier.height(16.dp))}
     }
@@ -291,22 +292,106 @@ fun SettingsScreen() {
 suspend fun loadBmp(ctx: android.content.Context, uri: Uri): Bitmap? = withContext(Dispatchers.IO){try{ctx.contentResolver.openInputStream(uri)?.let{BitmapFactory.decodeStream(it)}}catch(e:Exception){null}}
 
 suspend fun extractPatternAuto(bm: Bitmap): Bitmap = withContext(Dispatchers.Default) {
-    val w=bm.width;val h=bm.height;val out=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);val px=IntArray(w*h);bm.getPixels(px,0,w,0,0,w,h)
-    val edgeColors=mutableMapOf<Int,Int>()
-    for(x in 0 until w){listOf(px[x],px[(h-1)*w+x]).forEach{c->val q=android.graphics.Color.rgb((android.graphics.Color.red(c)/8)*8,(android.graphics.Color.green(c)/8)*8,(android.graphics.Color.blue(c)/8)*8);edgeColors[q]=(edgeColors[q]?:0)+1}}
-    for(y in 0 until h){listOf(px[y*w],px[y*w+w-1]).forEach{c->val q=android.graphics.Color.rgb((android.graphics.Color.red(c)/8)*8,(android.graphics.Color.green(c)/8)*8,(android.graphics.Color.blue(c)/8)*8);edgeColors[q]=(edgeColors[q]?:0)+1}}
-    val bgColor=edgeColors.maxByOrNull{it.value}?.key?:px[0]
-    val bgR=android.graphics.Color.red(bgColor);val bgG=android.graphics.Color.green(bgColor);val bgB=android.graphics.Color.blue(bgColor)
-    for(i in px.indices){val r=android.graphics.Color.red(px[i]);val g=android.graphics.Color.green(px[i]);val b=android.graphics.Color.blue(px[i]);px[i]=if(abs(r-bgR)+abs(g-bgG)+abs(b-bgB)>40)px[i] else android.graphics.Color.TRANSPARENT}
-    val cleaned=px.copyOf()
-    for(y in 1 until h-1) for(x in 1 until w-1){val idx=y*w+x;if(android.graphics.Color.alpha(px[idx])>0){val nb=listOf(px[idx-1],px[idx+1],px[idx-w],px[idx+w]).count{android.graphics.Color.alpha(it)>0};if(nb<2)cleaned[idx]=android.graphics.Color.TRANSPARENT}}
-    out.setPixels(cleaned,0,w,0,0,w,h);out
+    // Preserve original RGB and internal holes. Remove only background connected
+    // to the image border; unlike global color deletion, this protects motifs.
+    val w = bm.width
+    val h = bm.height
+    require(w > 0 && h > 0 && w.toLong() * h.toLong() <= 25_000_000L) {
+        "Image dimensions are unsupported"
+    }
+    val count = w * h
+    val pixels = IntArray(count)
+    bm.getPixels(pixels, 0, w, 0, 0, w, h)
+    val histogram = HashMap<Int, Int>()
+    fun bucket(c: Int): Int {
+        val r = android.graphics.Color.red(c) / 16
+        val g = android.graphics.Color.green(c) / 16
+        val b = android.graphics.Color.blue(c) / 16
+        return (r shl 8) or (g shl 4) or b
+    }
+    fun vote(index: Int) {
+        val c = pixels[index]
+        if (android.graphics.Color.alpha(c) < 16) return
+        val k = bucket(c)
+        histogram[k] = (histogram[k] ?: 0) + 1
+    }
+    for (x in 0 until w) { vote(x); vote((h - 1) * w + x) }
+    for (y in 0 until h) { vote(y * w); vote(y * w + w - 1) }
+    val dominant = histogram.maxByOrNull { it.value }?.key
+    if (dominant == null) {
+        return@withContext Bitmap.createBitmap(bm).copy(Bitmap.Config.ARGB_8888, true)
+    }
+    val br = ((dominant shr 8) and 15) * 16 + 8
+    val bg = ((dominant shr 4) and 15) * 16 + 8
+    val bb = (dominant and 15) * 16 + 8
+    fun isBackground(index: Int): Boolean {
+        val c = pixels[index]
+        if (android.graphics.Color.alpha(c) < 16) return true
+        val dr = android.graphics.Color.red(c) - br
+        val dg = android.graphics.Color.green(c) - bg
+        val db = android.graphics.Color.blue(c) - bb
+        return dr * dr + dg * dg + db * db <= 38 * 38
+    }
+    val visited = BooleanArray(count)
+    val queue = IntArray(count)
+    var head = 0
+    var tail = 0
+    fun enqueue(index: Int) {
+        if (!visited[index] && isBackground(index)) {
+            visited[index] = true
+            queue[tail++] = index
+        }
+    }
+    for (x in 0 until w) { enqueue(x); enqueue((h - 1) * w + x) }
+    for (y in 0 until h) { enqueue(y * w); enqueue(y * w + w - 1) }
+    while (head < tail) {
+        val i = queue[head++]
+        val x = i % w
+        if (x > 0) enqueue(i - 1)
+        if (x + 1 < w) enqueue(i + 1)
+        if (i >= w) enqueue(i - w)
+        if (i < count - w) enqueue(i + w)
+    }
+    for (i in pixels.indices) {
+        if (visited[i]) pixels[i] = android.graphics.Color.TRANSPARENT
+    }
+    // Remove isolated one-pixel specks only; do not join disconnected motifs.
+    val cleaned = pixels.copyOf()
+    for (y in 1 until h - 1) for (x in 1 until w - 1) {
+        val i = y * w + x
+        if (android.graphics.Color.alpha(pixels[i]) == 0) continue
+        var neighbors = 0
+        for (dy in -1..1) for (dx in -1..1) {
+            if (dx != 0 || dy != 0) {
+                if (android.graphics.Color.alpha(pixels[i + dy * w + dx]) > 0) neighbors++
+            }
+        }
+        if (neighbors == 0) cleaned[i] = android.graphics.Color.TRANSPARENT
+    }
+    Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply {
+        setPixels(cleaned, 0, w, 0, 0, w, h)
+    }
+}
+
+fun embroideryColorName(c: Int): String {
+ val r=android.graphics.Color.red(c);val g=android.graphics.Color.green(c);val b=android.graphics.Color.blue(c)
+ val mx=maxOf(r,g,b);val mn=minOf(r,g,b)
+ if(mx-mn<25)return when{mx<55->"أسود";mx<120->"رمادي داكن";mx<200->"رمادي";else->"أبيض"}
+ if(r>170&&g>140&&b<120)return "ذهبي"
+ if(r>g*1.35&&r>b*1.35)return if(g>90)"برتقالي" else "أحمر"
+ if(g>r*1.25&&g>b*1.1)return "أخضر"
+ if(b>r*1.25&&b>g*1.1)return "أزرق"
+ if(r>110&&b>g*1.3)return "بنفسجي"
+ if(r>g&&g>b)return if(r<150)"بني" else "بيج"
+ return "لون مختلط"
 }
 
 suspend fun getColors(bm: Bitmap): List<Int> = withContext(Dispatchers.Default) {
     val map=mutableMapOf<Int,Int>()
     for(y in 0 until bm.height step 2) for(x in 0 until bm.width step 2){val p=bm.getPixel(x,y);if(android.graphics.Color.alpha(p)>128){val q=android.graphics.Color.rgb((android.graphics.Color.red(p)/16)*16,(android.graphics.Color.green(p)/16)*16,(android.graphics.Color.blue(p)/16)*16);map[q]=(map[q]?:0)+1}}
-    map.entries.sortedByDescending{it.value}.take(32).map{it.key}
+    val ranked = map.entries.sortedByDescending { it.value }
+    val minCount = maxOf(3, ranked.sumOf { it.value } / 200)
+    ranked.filter { it.value >= minCount }.take(12).map { it.key }
 }
 
 fun getPixelWidth(px: IntArray, w: Int, h: Int, x: Int, y: Int): Int {
@@ -327,19 +412,25 @@ fun calcStitchAngle(px: IntArray, w: Int, h: Int, x: Int, y: Int): Float {
 }
 
 suspend fun genStitchesPro(bm: Bitmap, colors: List<Int>, density: Int=4): List<Stitch> = withContext(Dispatchers.Default) {
-    val list=mutableListOf<Stitch>();val w=bm.width;val h=bm.height;val px=IntArray(w*h);bm.getPixels(px,0,w,0,0,w,h);val step=density.coerceIn(2,8)
-    for(y in 0 until h step step){val lr=(y/step)%2==0;val xs=if(lr) 0 until w step step else w-1 downTo 0 step step
-        for(x in xs){val p=px[y*w+x];if(android.graphics.Color.alpha(p)>128){
-            val pixelColor=p
-            var md=Int.MAX_VALUE;var ni=0
-            colors.forEachIndexed{i,c->val d=(android.graphics.Color.red(p)-android.graphics.Color.red(c)).let{it*it}+(android.graphics.Color.green(p)-android.graphics.Color.green(c)).let{it*it}+(android.graphics.Color.blue(p)-android.graphics.Color.blue(c)).let{it*it};if(d<md){md=d;ni=i}}
-            val isEdge=isEdgePixel(px,w,h,x,y)
-            val lineWidth=getPixelWidth(px,w,h,x,y)
-            val type=when{lineWidth<=3->StitchType.RUN;isEdge&&step<=4->StitchType.SATIN;isEdge->StitchType.RUN;else->StitchType.TATAMI}
-            val angle=if(type==StitchType.SATIN)calcStitchAngle(px,w,h,x,y) else 0f
-            list.add(Stitch(x.toFloat(),y.toFloat(),ni,pixelColor,type,angle))
-        }}
-    };list
+ val w=bm.width;val h=bm.height;val px=IntArray(w*h);bm.getPixels(px,0,w,0,0,w,h)
+ val palette=colors.ifEmpty{listOf(android.graphics.Color.BLACK)};val labels=IntArray(px.size){-1}
+ for(i in px.indices){val c=px[i];if(android.graphics.Color.alpha(c)<160)continue
+  var best=Int.MAX_VALUE;var chosen=0
+  palette.forEachIndexed{index,col->val dr=android.graphics.Color.red(c)-android.graphics.Color.red(col);val dg=android.graphics.Color.green(c)-android.graphics.Color.green(col);val db=android.graphics.Color.blue(c)-android.graphics.Color.blue(col);val d=dr*dr+dg*dg+db*db;if(d<best){best=d;chosen=index}}
+  labels[i]=chosen
+ }
+ val rowStep=density.coerceIn(3,8);val stitches=ArrayList<Stitch>()
+ for(ci in palette.indices)for(y in 0 until h step rowStep){
+  val runs=mutableListOf<Pair<Int,Int>>();var x=0
+  while(x<w){if(labels[y*w+x]!=ci){x++;continue};val a=x;while(x<w&&labels[y*w+x]==ci)x++;if(x-a>=2)runs.add(a to (x-1))}
+  val forward=(y/rowStep)%2==0
+  for((a,b) in if(forward)runs else runs.asReversed()){
+   val start=if(forward)a else b;val finish=if(forward)b else a
+   val n=maxOf(1,kotlin.math.ceil((b-a).toDouble()/35.0).toInt())
+   for(j in 0..n){val xx=start+(finish-start)*j.toFloat()/n;stitches.add(Stitch(xx,y.toFloat(),ci,palette[ci],StitchType.TATAMI,0f))}
+  }
+ }
+ stitches
 }
 
 fun calcQuality(bm: Bitmap, stitches: List<Stitch>): QualityReport {
@@ -391,7 +482,10 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
             val targetX=(st.x*scaleX).toInt()
             val targetY= -(st.y*scaleY).toInt()
             var dx=targetX-lastX;var dy=targetY-lastY
-            val isJump=kotlin.math.abs(dx)>121 || kotlin.math.abs(dy)>121
+            // A disconnected region must never be sewn together merely because
+            // its distance happens to be less than the DST 12.1 mm record limit.
+            val distanceMM = kotlin.math.hypot(dx.toDouble(), dy.toDouble()) / 10.0
+            val isJump = index == 0 || distanceMM > 5.0 || (index > 0 && st.type != p.stitches[index-1].type && distanceMM > 2.0)
             if(dx==0 && dy==0)fos.write(tajimaRecord(0,0))
             while(dx!=0 || dy!=0){
                 val sx=dx.coerceIn(-121,121);val sy=dy.coerceIn(-121,121)
