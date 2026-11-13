@@ -161,10 +161,17 @@ fun ZoomablePreviewDialog(stitches: List<Stitch>, colors: List<Int>, onDismiss: 
                 stitches.take(showCount).forEachIndexed{idx,st->
                     val c=if(st.color!=0)Color(st.color) else if(st.colorIdx<colors.size)Color(colors[st.colorIdx]) else Color.Black
                     val sx=ox+st.x*sc; val sy=oy+st.y*sc
-                    when(st.type){
-                        StitchType.SATIN->{val len=10f;drawLine(c,Offset(sx,sy),Offset(sx+cos(st.angle)*len,sy+sin(st.angle)*len),strokeWidth=3.5f,cap=StrokeCap.Round)}
-                        StitchType.RUN->{if(idx>0&&stitches[idx-1].colorIdx==st.colorIdx)drawLine(c,Offset(ox+stitches[idx-1].x*sc,oy+stitches[idx-1].y*sc),Offset(sx,sy),strokeWidth=1.8f,cap=StrokeCap.Round)}
-                        StitchType.TATAMI->drawCircle(c,2.2f,Offset(sx,sy))
+                    // Display the actual consecutive needle path as thread segments,
+                    // never as decorative dots or invented satin strokes.
+                    if(idx>0) {
+                        val prev=stitches[idx-1]
+                        val dx=st.x-prev.x;val dy=st.y-prev.y
+                        val physicalMM=kotlin.math.sqrt(dx*dx+dy*dy)*150f/mx.coerceAtLeast(1f)
+                        if(prev.colorIdx==st.colorIdx && physicalMM<=3f && physicalMM>0f) {
+                            val from=Offset(ox+prev.x*sc,oy+prev.y*sc)
+                            drawLine(c.copy(alpha=0.35f),from,Offset(sx,sy),strokeWidth=3.5f,cap=StrokeCap.Round)
+                            drawLine(c,from,Offset(sx,sy),strokeWidth=1.5f,cap=StrokeCap.Round)
+                        }
                     }
                 }
             }
@@ -195,7 +202,7 @@ fun StitchMapDialog(stitches: List<Stitch>, colors: List<Int>, onDismiss: () -> 
                     when(st.type){
                         StitchType.SATIN->{val len=10f;drawLine(c,Offset(sx,sy),Offset(sx+cos(st.angle)*len,sy+sin(st.angle)*len),strokeWidth=3.5f,cap=StrokeCap.Round)}
                         StitchType.RUN->{if(idx>0&&stitches[idx-1].colorIdx==st.colorIdx)drawLine(c,Offset(ox+stitches[idx-1].x*sc,oy+stitches[idx-1].y*sc),Offset(sx,sy),strokeWidth=2f,cap=StrokeCap.Round)}
-                        StitchType.TATAMI->drawCircle(c,2f,Offset(sx,sy))
+                        StitchType.TATAMI->{if(idx>0&&project.stitches[idx-1].colorIdx==st.colorIdx){val prev=project.stitches[idx-1];val dx=st.x-prev.x;val dy=st.y-prev.y;if(kotlin.math.sqrt(dx*dx+dy*dy)*150f/mx.coerceAtLeast(1f)<=3f)drawLine(c,Offset(ox+prev.x*sc,oy+prev.y*sc),Offset(sx,sy),strokeWidth=1.5f,cap=StrokeCap.Round)}}
                     }
                 }
             }
@@ -219,7 +226,7 @@ fun MainApp() {
     LaunchedEffect(Unit){projects=loadProjects(ctx)}
     if(showSaveDialog){AlertDialog(onDismissRequest={showSaveDialog=false},containerColor=Color(0xFF1A1A2E),title={Text("حفظ المشروع",color=Color.White,fontWeight=FontWeight.Bold)},text={OutlinedTextField(value=projectName,onValueChange={projectName=it},label={Text("اسم المشروع",color=Color.Gray)},colors=OutlinedTextFieldDefaults.colors(focusedBorderColor=Color(0xFF9C6FDE),unfocusedBorderColor=Color.Gray,focusedTextColor=Color.White,unfocusedTextColor=Color.White))},confirmButton={Button(onClick={scope.launch{val saved=project.copy(name=projectName.ifEmpty{"مشروع جديد"},savedAt=System.currentTimeMillis());saveProject(ctx,saved);projects=loadProjects(ctx);showSaveDialog=false}},colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF9C6FDE))){Text("حفظ")}},dismissButton={TextButton(onClick={showSaveDialog=false}){Text("إلغاء",color=Color.Gray)}})}
     Scaffold(containerColor=Color(0xFF0D0D1A),
-        topBar={TopAppBar(title={Column{Text("Embroidery Studio Pro",fontSize=16.sp,fontWeight=FontWeight.Bold,color=Color.White);Text("v4.5 • 2026",fontSize=10.sp,color=Color(0xFF9C6FDE))}},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color(0xFF0D0D1A)),actions={if(loading)CircularProgressIndicator(modifier=Modifier.size(20.dp),color=Color(0xFF9C6FDE),strokeWidth=2.dp);if(project.stitches.isNotEmpty())IconButton(onClick={projectName=project.name;showSaveDialog=true}){Icon(Icons.Default.Save,null,tint=Color(0xFF9C6FDE))}})},
+        topBar={TopAppBar(title={Column{Text("Embroidery Studio Pro",fontSize=16.sp,fontWeight=FontWeight.Bold,color=Color.White);Text("v4.6 • 2026",fontSize=10.sp,color=Color(0xFF9C6FDE))}},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color(0xFF0D0D1A)),actions={if(loading)CircularProgressIndicator(modifier=Modifier.size(20.dp),color=Color(0xFF9C6FDE),strokeWidth=2.dp);if(project.stitches.isNotEmpty())IconButton(onClick={projectName=project.name;showSaveDialog=true}){Icon(Icons.Default.Save,null,tint=Color(0xFF9C6FDE))}})},
         bottomBar={NavigationBar(containerColor=Color(0xFF1A1A2E)){listOf(Triple("home",Icons.Default.Home,"الرئيسية"),Triple("projects",Icons.Default.List,"مشاريعي"),Triple("settings",Icons.Default.Settings,"الإعدادات")).forEach{(s,icon,label)->NavigationBarItem(icon={Icon(icon,null)},label={Text(label,fontSize=11.sp)},selected=screen==s,onClick={screen=s},colors=NavigationBarItemDefaults.colors(selectedIconColor=Color(0xFF9C6FDE),selectedTextColor=Color(0xFF9C6FDE),unselectedIconColor=Color.Gray,unselectedTextColor=Color.Gray,indicatorColor=Color(0xFF2A2A3E)))}}}
     ){pad->Box(Modifier.padding(pad)){when(screen){"home"->HomeScreen(project,loading,loadingMsg,{project=it},{b,m->loading=b;loadingMsg=m});"projects"->ProjectsScreen(projects,{project=it;screen="home"},{p->scope.launch{deleteProject(ctx,p.id);projects=loadProjects(ctx)}});"settings"->SettingsScreen()}}}
 }
@@ -284,7 +291,7 @@ fun InfoItem(label: String, value: String) {
 fun SettingsScreen() {
     LazyColumn(Modifier.fillMaxSize().background(Color(0xFF0D0D1A)).padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
         item{Text("الإعدادات",color=Color.White,fontSize=20.sp,fontWeight=FontWeight.Bold)}
-        listOf(Triple("🌐","اللغة","العربية"),Triple("📐","وحدة القياس","ملليمتر"),Triple("⚡","جودة الغرز","احترافية — 32 لون"),Triple("🌙","الوضع","داكن"),Triple("📱","الإصدار","4.5 • 2026")).forEach{(e,t,v)->item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(12.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Row(Modifier.padding(14.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Row(verticalAlignment=Alignment.CenterVertically){Text(e,fontSize=18.sp);Spacer(Modifier.width(10.dp));Text(t,color=Color.White,fontSize=14.sp)};Text(v,color=Color(0xFF9C6FDE),fontSize=13.sp)}}}}
+        listOf(Triple("🌐","اللغة","العربية"),Triple("📐","وحدة القياس","ملليمتر"),Triple("⚡","جودة الغرز","احترافية — 32 لون"),Triple("🌙","الوضع","داكن"),Triple("📱","الإصدار","4.6 • 2026")).forEach{(e,t,v)->item{Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(12.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFF1A1A2E))){Row(Modifier.padding(14.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Row(verticalAlignment=Alignment.CenterVertically){Text(e,fontSize=18.sp);Spacer(Modifier.width(10.dp));Text(t,color=Color.White,fontSize=14.sp)};Text(v,color=Color(0xFF9C6FDE),fontSize=13.sp)}}}}
     }
 }
 
