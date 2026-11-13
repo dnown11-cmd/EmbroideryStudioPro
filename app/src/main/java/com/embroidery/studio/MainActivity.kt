@@ -494,7 +494,21 @@ suspend fun exportProject(ctx: android.content.Context, p: Project) = withContex
                 if(steps>45)continuous=false
                 else for(k in 0..steps){
                     val px=x0+(x1-x0)*k/steps;val py=y0+(y1-y0)*k/steps
-                    if(px !in 0 until bitmap.width || py !in 0 until bitmap.height || android.graphics.Color.alpha(bitmap.getPixel(px,py))<160){continuous=false;break}
+                    if(px !in 0 until bitmap.width || py !in 0 until bitmap.height){continuous=false;break}
+                    val pixel=bitmap.getPixel(px,py)
+                    if(android.graphics.Color.alpha(pixel)<160){continuous=false;break}
+                    // A stitch must not traverse another palette region.
+                    if(p.colors.isNotEmpty()){
+                        var nearest=0;var best=Int.MAX_VALUE
+                        p.colors.forEachIndexed{ci,c->
+                            val r=android.graphics.Color.red(pixel)-android.graphics.Color.red(c)
+                            val g=android.graphics.Color.green(pixel)-android.graphics.Color.green(c)
+                            val b=android.graphics.Color.blue(pixel)-android.graphics.Color.blue(c)
+                            val d=r*r+g*g+b*b
+                            if(d<best){best=d;nearest=ci}
+                        }
+                        if(nearest!=st.colorIdx){continuous=false;break}
+                    }
                 }
             }
             val isJump=!continuous
